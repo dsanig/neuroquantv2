@@ -1,26 +1,63 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import Index from "./pages/Index.tsx";
-import NotFound from "./pages/NotFound.tsx";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { AppLayout } from "@/components/AppLayout";
+import LoginPage from "@/pages/LoginPage";
+import DashboardPage from "@/pages/DashboardPage";
+import PositionsPage from "@/pages/PositionsPage";
+import TradesPage from "@/pages/TradesPage";
+import StrategiesPage from "@/pages/StrategiesPage";
+import RiskPage from "@/pages/RiskPage";
+import MarginPage from "@/pages/MarginPage";
+import PerformancePage from "@/pages/PerformancePage";
+import IncomePage from "@/pages/IncomePage";
+import ImportsPage from "@/pages/ImportsPage";
+import SourcesPage from "@/pages/SourcesPage";
+import ParserConfigPage from "@/pages/ParserConfigPage";
+import MappingRulesPage from "@/pages/MappingRulesPage";
+import ReportsPage from "@/pages/ReportsPage";
+import AuditLogPage from "@/pages/AuditLogPage";
+import SettingsPage from "@/pages/SettingsPage";
+import AdminPage from "@/pages/AdminPage";
+import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
+    <AuthProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route element={<AppLayout />}>
+              <Route path="/" element={<DashboardPage />} />
+              <Route path="/positions" element={<PositionsPage />} />
+              <Route path="/trades" element={<TradesPage />} />
+              <Route path="/strategies" element={<StrategiesPage />} />
+              <Route path="/risk" element={<RiskPage />} />
+              <Route path="/margin" element={<MarginPage />} />
+              <Route path="/performance" element={<PerformancePage />} />
+              <Route path="/income" element={<IncomePage />} />
+              <Route path="/imports" element={<ImportsPage />} />
+              <Route path="/sources" element={<SourcesPage />} />
+              <Route path="/parser-config" element={<ParserConfigPage />} />
+              <Route path="/mapping-rules" element={<MappingRulesPage />} />
+              <Route path="/reports" element={<ReportsPage />} />
+              <Route path="/audit-log" element={<AuditLogPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/admin" element={<AdminPage />} />
+            </Route>
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </AuthProvider>
   </QueryClientProvider>
 );
 
