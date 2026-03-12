@@ -1,23 +1,32 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("admin@neuroquant.io");
   const [password, setPassword] = useState("password");
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, isAuthenticated, isAuthLoading } = useAuth();
   const navigate = useNavigate();
+
+  if (!isAuthLoading && isAuthenticated) {
+    return <Navigate to="/" replace />;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     const ok = await login(email, password);
     setLoading(false);
-    if (ok) navigate("/", { replace: true });
+    if (ok) {
+      navigate("/", { replace: true });
+    } else {
+      toast.error("Sign in failed. Check your credentials and try again.");
+    }
   };
 
   return (

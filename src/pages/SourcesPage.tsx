@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Plus, TestTube, Power, PowerOff, Loader2, RefreshCw, FolderSearch } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
 type SortField = "name" | "size" | "modifiedAt";
 
@@ -42,6 +44,7 @@ export default function SourcesPage() {
   const [debugJson, setDebugJson] = useState<string>("");
 
   const { data: sources, isLoading, refetch } = useDataSources();
+  const { isAuthLoading, isAuthenticated } = useAuth();
   const upsert = useUpsertDataSource();
   const toggle = useToggleSource();
   const testFtp = useTestFtpConnection();
@@ -163,6 +166,16 @@ export default function SourcesPage() {
   };
 
   const handleSave = () => {
+    if (isAuthLoading) {
+      toast.error("Your session is not ready or has expired. Please sign in again.");
+      return;
+    }
+
+    if (!isAuthenticated) {
+      toast.error("Your session is not ready or has expired. Please sign in again.");
+      return;
+    }
+
     const payload = { ...form };
     if (editing) payload.id = editing;
     upsert.mutate(payload, {
@@ -323,7 +336,7 @@ export default function SourcesPage() {
 
           <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-border">
             <Button variant="outline" size="sm" onClick={() => { setEditing(null); setCreating(false); }}>Cancel</Button>
-            <Button size="sm" onClick={handleSave} disabled={upsert.isPending}>
+            <Button size="sm" onClick={handleSave} disabled={upsert.isPending || isAuthLoading || !isAuthenticated}>
               {upsert.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : null}
               Save Configuration
             </Button>

@@ -1,41 +1,73 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
-
-interface User {
-  email: string;
-  name: string;
-  role: string;
-}
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import type { User as SupabaseUser } from '@supabase/supabase-js';
+import { supabase } from '@/integrations/supabase/client';
 
 interface AuthContextType {
-  user: User | null;
+  user: SupabaseUser | null;
   isAuthenticated: boolean;
+  isAuthLoading: boolean;
   login: (email: string, password: string) => Promise<boolean>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(() => {
-    const stored = sessionStorage.getItem('nq_user');
-    return stored ? JSON.parse(stored) : null;
-  });
+  const [user, setUser] = useState<SupabaseUser | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
 
-  const login = useCallback(async (email: string, _password: string) => {
-    // Mock auth
-    const u = { email, name: email.split('@')[0], role: 'admin' };
-    setUser(u);
-    sessionStorage.setItem('nq_user', JSON.stringify(u));
-    return true;
+  useEffect(() => {
+    let mounted = true;
+
+    const initializeAuth = async () => {
+      const { data, error } = await supabase.auth.getSession();
+
+      if (error) {
+        console.error('Failed to initialize auth session.', error);
+      }
+
+      if (!mounted) return;
+      setUser(data.session?.user ?? null);
+      setIsAuthLoading(false);
+    };
+
+    initializeAuth();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      setIsAuthLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+      authListener.subscription.unsubscribe();
+    };
   }, []);
 
-  const logout = useCallback(() => {
+  const login = useCallback(async (email: string, password: string) => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (error) {
+      console.error('Sign-in failed.', error);
+      return false;
+    }
+
+    setUser(data.user ?? null);
+    return !!data.user;
+  }, []);
+
+  const logout = useCallback(async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error('Sign-out failed.', error);
+      return;
+    }
+
     setUser(null);
-    sessionStorage.removeItem('nq_user');
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, logout }}>
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isAuthLoading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
