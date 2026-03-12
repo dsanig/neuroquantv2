@@ -85,6 +85,40 @@ export function useFtpFetch() {
   });
 }
 
+export type FtpBrowserFile = {
+  name: string;
+  fullPath: string;
+  extension: string;
+  size: number | null;
+  modifiedAt: string | null;
+  isDirectory: boolean;
+  permissions: string | null;
+  raw: string;
+};
+
+export type FtpBrowseResponse = {
+  success: boolean;
+  connectionStatus: 'connected' | 'error';
+  files?: FtpBrowserFile[];
+  fileCount?: number;
+  listedAt?: string;
+  testedAt?: string;
+  latencyMs?: number;
+  testOnly?: boolean;
+  error?: string;
+  userMessage?: string;
+};
+
+export function useFtpBrowse() {
+  return useMutation({
+    mutationFn: async (params: { sourceId: string; testOnly?: boolean }) => {
+      const { data, error } = await supabase.functions.invoke('ftp-browse', { body: params });
+      if (error) throw error;
+      return data as FtpBrowseResponse;
+    },
+  });
+}
+
 // ===== Parser Profiles =====
 export function useParserProfiles() {
   return useQuery({
