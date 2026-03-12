@@ -77,7 +77,7 @@ Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/c
 The regular FTP test and the FTP Test Window both use Supabase Edge Functions now:
 
 - `ftp-test` for lightweight connection checks.
-- `ftp-browse` for read-only connect + optional directory listing (`testOnly` mode and list mode).
+- `ftp-fetch` for read-only connect + directory listing (`testOnly` mode and list mode).
 
 ### Required environment variables
 

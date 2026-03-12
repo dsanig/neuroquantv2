@@ -2,196 +2,371 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const CONTROL_TIMEOUT_MS = 12_000;
+const DATA_TIMEOUT_MS = 20_000;
+
+type FtpListFile = {
+  name: string;
+  extension: string;
+  size: number | null;
+  modifiedAt: string | null;
+  fullPath: string;
+  directory: string;
+  isDirectory: boolean;
+  permissions: string | null;
+  type: string;
+  status: string;
+  raw: string;
+};
+
+type ClassifiedError = {
+  errorCode:
+    | "BACKEND_INVOKE_FAILURE"
+    | "FTP_AUTH_FAILED"
+    | "INVALID_PATH"
+    | "EMPTY_DIRECTORY"
+    | "TIMEOUT"
+    | "UNSUPPORTED_PROTOCOL"
+    | "NETWORK_UNREACHABLE"
+    | "FTP_PERMISSION_DENIED"
+    | "UNKNOWN_ERROR";
+  userMessage: string;
+  technicalMessage: string;
+  status: number;
+};
+
+function withTimeout<T>(promise: Promise<T>, ms: number, errorCode: string) {
+  return Promise.race<T>([
+    promise,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(errorCode)), ms)),
+  ]);
+}
+
+function parseCode(line: string): number | null {
+  const m = line.match(/^(\d{3})/);
+  return m ? Number(m[1]) : null;
+}
+
+async function readResponse(conn: Deno.Conn): Promise<string> {
+  const decoder = new TextDecoder();
+  const chunks: string[] = [];
+
+  for (let i = 0; i < 25; i += 1) {
+    const buf = new Uint8Array(1024);
+    const n = await withTimeout(conn.read(buf), CONTROL_TIMEOUT_MS, "TIMEOUT");
+    if (n === null || n === 0) break;
+
+    chunks.push(decoder.decode(buf.subarray(0, n)));
+    const text = chunks.join("");
+    const lines = text.split(/\r?\n/).filter(Boolean);
+    const lastLine = lines[lines.length - 1] || "";
+
+    if (/^\d{3} /.test(lastLine)) {
+      return text;
+    }
+
+    if (/^\d{3}-/.test(lines[0] || "") && /^\d{3} /.test(lastLine)) {
+      return text;
+    }
+  }
+
+  return chunks.join("");
+}
+
+async function sendCommand(conn: Deno.Conn, command: string): Promise<string> {
+  const encoder = new TextEncoder();
+  await withTimeout(conn.write(encoder.encode(`${command}\r\n`)), CONTROL_TIMEOUT_MS, "TIMEOUT");
+  return await readResponse(conn);
+}
+
+function parsePasvResponse(response: string): number {
+  const match = response.match(/\((\d+),(\d+),(\d+),(\d+),(\d+),(\d+)\)/);
+  if (!match) {
+    throw new Error("PASV_PARSE_FAILED");
+  }
+
+  return Number(match[5]) * 256 + Number(match[6]);
+}
+
+function toIsoDate(year: number, month: number, day: number, hh = 0, mm = 0): string {
+  return new Date(Date.UTC(year, month, day, hh, mm, 0, 0)).toISOString();
+}
+
+function parseUnixListLine(line: string, hostPath: string): FtpListFile | null {
+  const parts = line.trim().split(/\s+/);
+  if (parts.length < 9) return null;
+
+  const permissions = parts[0] || null;
+  const isDirectory = permissions?.startsWith("d") || false;
+  const size = Number(parts[4]);
+  const monthStr = parts[5];
+  const day = Number(parts[6]);
+  const timeOrYear = parts[7];
+  const name = parts.slice(8).join(" ");
+  if (!name || name === "." || name === "..") return null;
+
+  const monthMap: Record<string, number> = {
+    jan: 0,
+    feb: 1,
+    mar: 2,
+    apr: 3,
+    may: 4,
+    jun: 5,
+    jul: 6,
+    aug: 7,
+    sep: 8,
+    oct: 9,
+    nov: 10,
+    dec: 11,
+  };
+
+  const month = monthMap[(monthStr || "").toLowerCase()];
+  let modifiedAt: string | null = null;
+
+  if (Number.isFinite(day) && Number.isFinite(month)) {
+    if (/^\d{1,2}:\d{2}$/.test(timeOrYear)) {
+      const [hh, mm] = timeOrYear.split(":").map(Number);
+      modifiedAt = toIsoDate(new Date().getUTCFullYear(), month, day, hh, mm);
+    } else if (/^\d{4}$/.test(timeOrYear)) {
+      modifiedAt = toIsoDate(Number(timeOrYear), month, day);
+    }
+  }
+
+  const extension = name.includes(".") ? name.split(".").pop() || "" : "";
+  const normalizedPath = hostPath.endsWith("/") ? `${hostPath}${name}` : `${hostPath}/${name}`;
+
+  return {
+    name,
+    extension,
+    size: Number.isFinite(size) ? size : null,
+    modifiedAt,
+    fullPath: normalizedPath,
+    directory: hostPath,
+    isDirectory,
+    permissions,
+    type: isDirectory ? "directory" : "file",
+    status: "ok",
+    raw: line,
+  };
+}
+
+function classifyError(err: unknown): ClassifiedError {
+  const msg = err instanceof Error ? err.message : String(err);
+  const lower = msg.toLowerCase();
+
+  if (msg === "TIMEOUT" || lower.includes("timeout")) {
+    return { errorCode: "TIMEOUT", userMessage: "FTP request timed out.", technicalMessage: msg, status: 504 };
+  }
+
+  if (msg === "UNSUPPORTED_PROTOCOL") {
+    return {
+      errorCode: "UNSUPPORTED_PROTOCOL",
+      userMessage: "This endpoint currently supports plain FTP sources only.",
+      technicalMessage: msg,
+      status: 400,
+    };
+  }
+
+  if (msg.startsWith("AUTH_FAILED") || lower.includes("530")) {
+    return { errorCode: "FTP_AUTH_FAILED", userMessage: "FTP authentication failed.", technicalMessage: msg, status: 401 };
+  }
+
+  if (msg.startsWith("PATH_INVALID") || lower.includes("not found") || lower.includes("failed to change directory")) {
+    return { errorCode: "INVALID_PATH", userMessage: "The remote FTP path is invalid or inaccessible.", technicalMessage: msg, status: 400 };
+  }
+
+  if (lower.includes("permission") || lower.includes("550")) {
+    return { errorCode: "FTP_PERMISSION_DENIED", userMessage: "FTP permission denied for this path.", technicalMessage: msg, status: 403 };
+  }
+
+  if (lower.includes("network") || lower.includes("refused") || lower.includes("unreachable") || lower.includes("dns")) {
+    return {
+      errorCode: "NETWORK_UNREACHABLE",
+      userMessage: "FTP server is unreachable from the backend runtime.",
+      technicalMessage: msg,
+      status: 502,
+    };
+  }
+
+  return { errorCode: "UNKNOWN_ERROR", userMessage: "FTP listing failed due to an unexpected backend error.", technicalMessage: msg, status: 500 };
+}
+
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
+  if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { sourceId } = await req.json();
-    
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const { sourceId, testOnly } = await req.json();
+
+    if (!sourceId) {
+      return new Response(JSON.stringify({ success: false, errorCode: "BACKEND_INVOKE_FAILURE", error: "Missing sourceId." }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get source config
     const { data: source, error: sourceError } = await supabase
-      .from('data_sources')
-      .select('*')
-      .eq('id', sourceId)
+      .from("data_sources")
+      .select("*")
+      .eq("id", sourceId)
       .single();
 
     if (sourceError || !source) {
-      throw new Error(`Source not found: ${sourceError?.message}`);
+      return new Response(JSON.stringify({ success: false, errorCode: "BACKEND_INVOKE_FAILURE", error: sourceError?.message || "Source not found." }), {
+        status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // Connect to FTP
+    if ((source.protocol || "").toUpperCase() !== "FTP") {
+      throw new Error("UNSUPPORTED_PROTOCOL");
+    }
+
+    const host = source.host;
     const port = source.port || 21;
-    let files: string[] = [];
-    let rawData = '';
+    const remotePath = source.remote_path || "/";
+
+    const conn = await withTimeout(Deno.connect({ hostname: host, port }), CONTROL_TIMEOUT_MS, "TIMEOUT");
+    const files: FtpListFile[] = [];
 
     try {
-      const conn = await Deno.connect({ hostname: source.host, port });
-      
-      // Read banner
-      const bannerBuf = new Uint8Array(1024);
-      await conn.read(bannerBuf);
-      
-      // Send USER command
-      const encoder = new TextEncoder();
-      const decoder = new TextDecoder();
-      
-      await conn.write(encoder.encode(`USER ${source.username}\r\n`));
-      const userBuf = new Uint8Array(1024);
-      await conn.read(userBuf);
-      
-      // Send PASS command (use password_ref as password for now)
-      if (source.password_ref) {
-        await conn.write(encoder.encode(`PASS ${source.password_ref}\r\n`));
-        const passBuf = new Uint8Array(1024);
-        await conn.read(passBuf);
-      }
-      
-      // Send PASV for passive mode
-      await conn.write(encoder.encode(`PASV\r\n`));
-      const pasvBuf = new Uint8Array(1024);
-      const pasvN = await conn.read(pasvBuf);
-      const pasvResp = decoder.decode(pasvBuf.subarray(0, pasvN || 0));
-      
-      // Parse PASV response to get data port
-      const pasvMatch = pasvResp.match(/\((\d+),(\d+),(\d+),(\d+),(\d+),(\d+)\)/);
-      
-      if (pasvMatch) {
-        const dataPort = parseInt(pasvMatch[5]) * 256 + parseInt(pasvMatch[6]);
-        
-        // Open data connection
-        const dataConn = await Deno.connect({ hostname: source.host, port: dataPort });
-        
-        // Send LIST command
-        await conn.write(encoder.encode(`LIST ${source.remote_path}\r\n`));
-        
-        // Read directory listing from data connection
-        const listBuf = new Uint8Array(8192);
-        const listN = await dataConn.read(listBuf);
-        const listing = decoder.decode(listBuf.subarray(0, listN || 0));
-        
-        // Parse file listing  
-        files = listing.split('\n')
-          .map(line => line.trim())
-          .filter(line => line.length > 0)
-          .map(line => {
-            const parts = line.split(/\s+/);
-            return parts[parts.length - 1];
-          })
-          .filter(name => {
-            if (!source.filename_pattern || source.filename_pattern === '*') return true;
-            const regex = new RegExp(source.filename_pattern.replace(/\*/g, '.*'));
-            return regex.test(name);
-          });
+      const banner = await readResponse(conn);
 
-        dataConn.close();
-        
-        // If files found, try to retrieve the first matching file
-        if (files.length > 0) {
-          // Send another PASV for file retrieval
-          await conn.write(encoder.encode(`PASV\r\n`));
-          const pasv2Buf = new Uint8Array(1024);
-          const pasv2N = await conn.read(pasv2Buf);
-          const pasv2Resp = decoder.decode(pasv2Buf.subarray(0, pasv2N || 0));
-          const pasv2Match = pasv2Resp.match(/\((\d+),(\d+),(\d+),(\d+),(\d+),(\d+)\)/);
-          
-          if (pasv2Match) {
-            const dataPort2 = parseInt(pasv2Match[5]) * 256 + parseInt(pasv2Match[6]);
-            const dataConn2 = await Deno.connect({ hostname: source.host, port: dataPort2 });
-            
-            const filePath = source.remote_path.endsWith('/') 
-              ? `${source.remote_path}${files[0]}` 
-              : `${source.remote_path}/${files[0]}`;
-              
-            // TYPE I for binary
-            await conn.write(encoder.encode(`TYPE I\r\n`));
-            const typeBuf = new Uint8Array(256);
-            await conn.read(typeBuf);
-            
-            await conn.write(encoder.encode(`RETR ${filePath}\r\n`));
-            
-            // Read file data
-            const chunks: Uint8Array[] = [];
-            let totalSize = 0;
-            while (true) {
-              const chunk = new Uint8Array(65536);
-              const n = await dataConn2.read(chunk);
-              if (n === null) break;
-              chunks.push(chunk.subarray(0, n));
-              totalSize += n;
-              if (totalSize > 10 * 1024 * 1024) break; // 10MB limit
-            }
-            
-            dataConn2.close();
-            
-            // Combine chunks
-            const combined = new Uint8Array(totalSize);
-            let offset = 0;
-            for (const chunk of chunks) {
-              combined.set(chunk, offset);
-              offset += chunk.length;
-            }
-            
-            rawData = new TextDecoder().decode(combined);
-          }
+      const userResponse = await sendCommand(conn, `USER ${source.username || ""}`);
+      const userCode = parseCode(userResponse);
+
+      if (userCode === 331 || userCode === 332) {
+        const passResponse = await sendCommand(conn, `PASS ${source.password_ref || ""}`);
+        const passCode = parseCode(passResponse);
+        if (!passCode || passCode >= 400) {
+          throw new Error(`AUTH_FAILED: ${passResponse}`);
+        }
+      } else if (!userCode || userCode >= 400) {
+        throw new Error(`AUTH_FAILED: ${userResponse}`);
+      }
+
+      if (testOnly) {
+        await sendCommand(conn, "QUIT");
+
+        await supabase.from("data_sources").update({
+          last_connected_at: new Date().toISOString(),
+          last_status: "connected",
+          last_error: null,
+        }).eq("id", sourceId);
+
+        return new Response(JSON.stringify({
+          success: true,
+          mode: "test",
+          testOnly: true,
+          connectionStatus: "connected",
+          fileCount: 0,
+          files: [],
+          testedAt: new Date().toISOString(),
+          banner: banner.trim(),
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const cwdResponse = await sendCommand(conn, `CWD ${remotePath}`);
+      const cwdCode = parseCode(cwdResponse);
+      if (!cwdCode || cwdCode >= 400) {
+        throw new Error(`PATH_INVALID: ${cwdResponse}`);
+      }
+
+      const pasvResponse = await sendCommand(conn, "PASV");
+      const pasvCode = parseCode(pasvResponse);
+      if (!pasvCode || pasvCode >= 400) {
+        throw new Error(`PASV_FAILED: ${pasvResponse}`);
+      }
+      const dataPort = parsePasvResponse(pasvResponse);
+      const dataConn = await withTimeout(Deno.connect({ hostname: host, port: dataPort }), DATA_TIMEOUT_MS, "TIMEOUT");
+
+      await sendCommand(conn, "LIST");
+
+      const decoder = new TextDecoder();
+      const chunks: string[] = [];
+      while (true) {
+        const chunk = new Uint8Array(4096);
+        const n = await withTimeout(dataConn.read(chunk), DATA_TIMEOUT_MS, "TIMEOUT");
+        if (n === null || n === 0) break;
+        chunks.push(decoder.decode(chunk.subarray(0, n)));
+      }
+      dataConn.close();
+
+      await readResponse(conn);
+      await sendCommand(conn, "QUIT");
+
+      const listing = chunks.join("");
+      const lines = listing.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+
+      for (const line of lines) {
+        const parsed = parseUnixListLine(line, remotePath);
+        if (!parsed) continue;
+
+        if (!source.filename_pattern || source.filename_pattern === "*") {
+          files.push(parsed);
+        } else {
+          const regex = new RegExp(String(source.filename_pattern).replace(/\*/g, ".*"));
+          if (regex.test(parsed.name)) files.push(parsed);
         }
       }
-      
-      // Send QUIT
-      await conn.write(encoder.encode(`QUIT\r\n`));
-      conn.close();
 
-      // Update source status
-      await supabase.from('data_sources').update({
+      await supabase.from("data_sources").update({
         last_connected_at: new Date().toISOString(),
-        last_status: 'connected',
+        last_status: "connected",
         last_error: null,
-      }).eq('id', sourceId);
+      }).eq("id", sourceId);
 
-    } catch (ftpError) {
-      const errMsg = ftpError instanceof Error ? ftpError.message : String(ftpError);
-      
-      await supabase.from('data_sources').update({
-        last_status: 'error',
-        last_error: errMsg,
-      }).eq('id', sourceId);
+      await supabase.from("audit_log").insert({
+        actor: "system",
+        event_type: "source.fetch",
+        entity_type: "data_source",
+        entity_id: sourceId,
+        source: "edge-function",
+        metadata: { files_found: files.length, file_names: files.map((f) => f.name) },
+      });
 
-      throw new Error(`FTP error: ${errMsg}`);
+      return new Response(JSON.stringify({
+        success: true,
+        mode: "list",
+        testOnly: false,
+        connectionStatus: "connected",
+        files,
+        fileCount: files.length,
+        emptyDirectory: files.length === 0,
+        listedAt: new Date().toISOString(),
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } finally {
+      try {
+        conn.close();
+      } catch {
+        // no-op
+      }
     }
-
-    // Log to audit
-    await supabase.from('audit_log').insert({
-      actor: 'system',
-      event_type: 'source.fetch',
-      entity_type: 'data_source',
-      entity_id: sourceId,
-      source: 'edge-function',
-      metadata: { files_found: files.length, file_names: files },
-    });
+  } catch (err) {
+    const classified = classifyError(err);
 
     return new Response(JSON.stringify({
-      success: true,
-      files,
-      fileCount: files.length,
-      rawDataPreview: rawData ? rawData.substring(0, 2000) : null,
-      rawDataLength: rawData.length,
+      success: false,
+      errorCode: classified.errorCode,
+      error: classified.technicalMessage,
+      userMessage: classified.userMessage,
+      connectionStatus: "error",
     }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Unknown error';
-    return new Response(JSON.stringify({ success: false, error: msg }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: classified.status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
