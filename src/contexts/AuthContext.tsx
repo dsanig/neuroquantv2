@@ -6,7 +6,7 @@ interface AuthContextType {
   user: SupabaseUser | null;
   isAuthenticated: boolean;
   isAuthLoading: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<{ success: boolean; errorMessage?: string }>;
   logout: () => Promise<void>;
 }
 
@@ -48,12 +48,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
-      console.error('Sign-in failed.', error);
-      return false;
+      if (import.meta.env.DEV) {
+        console.error('Sign-in failed.', {
+          message: error.message,
+          status: error.status,
+          code: error.code,
+          name: error.name,
+        });
+      } else {
+        console.error('Sign-in failed.');
+      }
+
+      return { success: false, errorMessage: error.message };
     }
 
     setUser(data.user ?? null);
-    return !!data.user;
+    return { success: !!data.user };
   }, []);
 
   const logout = useCallback(async () => {
