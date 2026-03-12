@@ -9,13 +9,20 @@ import { Plus, TestTube, Power, PowerOff, Loader2, RefreshCw, FolderSearch } fro
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
-type SortField = "name" | "size" | "modifiedAt";
+type SortField = "name" | "sizeBytes" | "modifiedAt";
 
-function formatBytes(size: number | null) {
-  if (size === null || Number.isNaN(size)) return "-";
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-  return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+function formatBytes(sizeBytes: number | null | undefined) {
+  if (typeof sizeBytes !== "number" || !Number.isFinite(sizeBytes) || sizeBytes < 0) return "-";
+  if (sizeBytes < 1024) return `${sizeBytes} B`;
+  if (sizeBytes < 1024 ** 2) return `${(sizeBytes / 1024).toFixed(1)} KB`;
+  if (sizeBytes < 1024 ** 3) return `${(sizeBytes / 1024 ** 2).toFixed(2)} MB`;
+  return `${(sizeBytes / 1024 ** 3).toFixed(2)} GB`;
+}
+
+function formatModifiedDate(value: string | null | undefined) {
+  if (!value) return "-";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? "-" : parsed.toLocaleString();
 }
 
 function maskHost(host: string) {
@@ -63,7 +70,7 @@ export default function SourcesPage() {
 
     const rows = files.filter((f) => {
       const searchOk = !searchTerm || f.name.toLowerCase().includes(searchTerm.toLowerCase());
-      const extOk = extensionFilter === "all" || f.extension.toLowerCase() === extensionFilter.toLowerCase();
+      const extOk = extensionFilter === "all" || (f.extension ?? "").toLowerCase() === extensionFilter.toLowerCase();
 
       let dateOk = true;
       if (dateFilter !== "all" && f.modifiedAt) {
@@ -83,8 +90,8 @@ export default function SourcesPage() {
       let value = 0;
       if (sortField === "name") {
         value = a.name.localeCompare(b.name);
-      } else if (sortField === "size") {
-        value = (a.size ?? -1) - (b.size ?? -1);
+      } else if (sortField === "sizeBytes") {
+        value = (a.sizeBytes ?? -1) - (b.sizeBytes ?? -1);
       } else {
         value = new Date(a.modifiedAt ?? 0).getTime() - new Date(b.modifiedAt ?? 0).getTime();
       }
@@ -95,7 +102,7 @@ export default function SourcesPage() {
   }, [files, searchTerm, extensionFilter, dateFilter, sortField, sortDirection]);
 
   const availableExtensions = useMemo(
-    () => Array.from(new Set(files.map((f) => f.extension).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    () => Array.from(new Set(files.map((f) => f.extension).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b)),
     [files],
   );
 
@@ -442,7 +449,7 @@ export default function SourcesPage() {
             <select value={sortField} onChange={(e) => setSortField(e.target.value as SortField)} className="w-full bg-secondary border border-border text-foreground text-sm rounded-md px-3 py-2">
               <option value="modifiedAt">Sort: Modified</option>
               <option value="name">Sort: Name</option>
-              <option value="size">Sort: Size</option>
+              <option value="sizeBytes">Sort: Size</option>
             </select>
             <select value={sortDirection} onChange={(e) => setSortDirection(e.target.value as "asc" | "desc")} className="w-full bg-secondary border border-border text-foreground text-sm rounded-md px-3 py-2">
               <option value="desc">Descending</option>
@@ -483,10 +490,10 @@ export default function SourcesPage() {
                   filteredFiles.map((file) => (
                     <tr key={`${file.fullPath}-${file.name}`} className="border-b border-border/60">
                       <td className="px-3 py-2 font-mono">{file.name}</td>
-                      <td className="px-3 py-2">{file.extension || "-"}</td>
-                      <td className="px-3 py-2">{formatBytes(file.size)}</td>
-                      <td className="px-3 py-2">{file.modifiedAt ? new Date(file.modifiedAt).toLocaleString() : "-"}</td>
-                      <td className="px-3 py-2 font-mono">{file.fullPath}</td>
+                      <td className="px-3 py-2">{file.extension ?? "-"}</td>
+                      <td className="px-3 py-2">{formatBytes(file.sizeBytes)}</td>
+                      <td className="px-3 py-2">{formatModifiedDate(file.modifiedAt)}</td>
+                      <td className="px-3 py-2 font-mono">{file.path ?? file.fullPath ?? "-"}</td>
                       <td className="px-3 py-2">{file.status || file.type || (file.isDirectory ? "directory" : "file")}</td>
                     </tr>
                   ))

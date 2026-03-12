@@ -127,7 +127,7 @@ export function useFtpFetch() {
           details: payload ?? error,
         });
       }
-      return data as FtpBrowseResponse;
+      return normalizeFtpBrowseResponse(data);
     },
     onSuccess: (data) => {
       if (!data.success) {
@@ -147,16 +147,22 @@ export function useFtpFetch() {
 
 export type FtpBrowserFile = {
   name: string;
+  extension: string | null;
+  sizeBytes: number | null;
+  modifiedAt: string | null;
+  path: string | null;
+  type: string | null;
+  status: string | null;
+  rights: string | null;
+  owner: string | null;
+  raw?: unknown;
+
+  // Backward-compatible fields used in existing UI code paths.
   fullPath: string;
   directory?: string;
-  extension: string;
   size: number | null;
-  modifiedAt: string | null;
   isDirectory: boolean;
   permissions: string | null;
-  type?: string;
-  status?: string;
-  raw: string;
 };
 
 export type FtpBrowseResponse = {
@@ -174,6 +180,119 @@ export type FtpBrowseResponse = {
   error?: string;
   userMessage?: string;
 };
+
+function extractExtension(name: string): string | null {
+  const trimmed = name.trim();
+  const lastDot = trimmed.lastIndexOf('.');
+  if (lastDot <= 0 || lastDot === trimmed.length - 1) return null;
+  return trimmed.slice(lastDot + 1).toLowerCase();
+}
+
+function toNullableNumber(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function toNullableDate(value: unknown): string | null {
+  if (typeof value !== 'string' && typeof value !== 'number') return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function normalizeFtpFile(input: unknown): FtpBrowserFile | null {
+  if (typeof input === 'string') {
+    const name = input.trim();
+    if (!name) return null;
+    const extension = extractExtension(name);
+    return {
+      name,
+      extension,
+      sizeBytes: null,
+      modifiedAt: null,
+      path: null,
+      type: 'file',
+      status: 'file',
+      rights: null,
+      owner: null,
+      raw: input,
+      fullPath: name,
+      directory: '',
+      size: null,
+      isDirectory: false,
+      permissions: null,
+    };
+  }
+
+  if (!input || typeof input !== 'object') return null;
+
+  const row = input as Record<string, unknown>;
+  const path = typeof row.path === 'string'
+    ? row.path
+    : typeof row.fullPath === 'string'
+      ? row.fullPath
+      : typeof row.filePath === 'string'
+        ? row.filePath
+        : null;
+
+  const nameFromPath = path?.split('/').filter(Boolean).pop() ?? null;
+  const name = (typeof row.name === 'string' && row.name.trim())
+    || (typeof row.filename === 'string' && row.filename.trim())
+    || nameFromPath
+    || null;
+  if (!name) return null;
+
+  const extension = typeof row.extension === 'string' && row.extension.trim()
+    ? row.extension.toLowerCase()
+    : extractExtension(name);
+
+  const sizeBytes = toNullableNumber(row.sizeBytes ?? row.size ?? row.bytes);
+  const modifiedAt = toNullableDate(row.modifiedAt ?? row.modified ?? row.mtime ?? row.date);
+  const type = typeof row.type === 'string' ? row.type : (row.isDirectory ? 'directory' : 'file');
+  const status = typeof row.status === 'string' ? row.status : (type === 'directory' ? 'directory' : 'file');
+  const rights = typeof row.rights === 'string'
+    ? row.rights
+    : typeof row.permissions === 'string'
+      ? row.permissions
+      : null;
+  const directory = typeof row.directory === 'string'
+    ? row.directory
+    : (path?.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '');
+
+  return {
+    name,
+    extension,
+    sizeBytes,
+    modifiedAt,
+    path,
+    type,
+    status,
+    rights,
+    owner: typeof row.owner === 'string' ? row.owner : null,
+    raw: row.raw ?? input,
+    fullPath: path ?? name,
+    directory,
+    size: sizeBytes,
+    isDirectory: type === 'directory' || Boolean(row.isDirectory),
+    permissions: rights,
+  };
+}
+
+function normalizeFtpBrowseResponse(payload: unknown): FtpBrowseResponse {
+  const raw = (payload && typeof payload === 'object' ? payload : {}) as Record<string, unknown>;
+  const files = Array.isArray(raw.files)
+    ? raw.files.map((item) => normalizeFtpFile(item)).filter((item): item is FtpBrowserFile => Boolean(item))
+    : [];
+
+  return {
+    ...(raw as FtpBrowseResponse),
+    files,
+    fileCount: typeof raw.fileCount === 'number' ? raw.fileCount : files.length,
+  };
+}
 
 export class FtpBrowseInvokeError extends Error {
   status: number;
