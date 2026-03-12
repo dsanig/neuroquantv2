@@ -14,7 +14,7 @@ export default function SettingsPage() {
           <h2 className="text-foreground font-semibold mb-4">User Settings</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div><label className="config-label">Display Name</label><Input defaultValue="Admin" className="bg-secondary border-border" /></div>
-            <div><label className="config-label">Email</label><Input defaultValue="admin@neuroquant.io" className="bg-secondary border-border" /></div>
+            <div><label className="config-label">Email</label><Input defaultValue="admin@admin.com" className="bg-secondary border-border" /></div>
             <div><label className="config-label">Timezone</label><Input defaultValue="America/New_York" className="bg-secondary border-border" /></div>
             <div><label className="config-label">Date Format</label><Input defaultValue="YYYY-MM-DD" className="bg-secondary border-border" /></div>
           </div>
