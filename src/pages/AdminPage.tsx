@@ -34,8 +34,8 @@ export default function AdminPage() {
           <div className="space-y-2">
             {[
               { service: 'Database', status: 'connected', latency: '2ms' },
-              { service: 'SFTP Connector', status: 'connected', latency: '145ms' },
-              { service: 'PGP Engine', status: 'connected', latency: '12ms' },
+              { service: 'External PostgreSQL Bridge', status: 'connected', latency: '145ms' },
+              { service: 'Data Parser Engine', status: 'connected', latency: '12ms' },
               { service: 'Parser Engine', status: 'connected', latency: '8ms' },
               { service: 'Scheduler', status: 'connected', latency: '1ms' },
             ].map(s => (

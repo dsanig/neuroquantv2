@@ -25,7 +25,7 @@ const mainNav = [
 
 const ingestionNav = [
   { title: "Imports", url: "/imports", icon: Download },
-  { title: "Sources", url: "/sources", icon: Database },
+  { title: "Data Connections", url: "/sources", icon: Database },
   { title: "Parser Config", url: "/parser-config", icon: Settings2 },
   { title: "Mapping Rules", url: "/mapping-rules", icon: MapPin },
 ];
@@ -83,7 +83,7 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground px-3">Ingestion</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground px-3">Data Operations</SidebarGroupLabel>
           <SidebarGroupContent>{renderItems(ingestionNav)}</SidebarGroupContent>
         </SidebarGroup>
 
