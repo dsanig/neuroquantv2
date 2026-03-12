@@ -134,9 +134,10 @@ export function useUpsertMappingRule() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (rule: Record<string, unknown>) => {
-      const { data, error } = rule.id
-        ? await supabase.from('mapping_rules').update(rule).eq('id', rule.id as string).select().single()
-        : await supabase.from('mapping_rules').insert(rule).select().single();
+      const { id, ...rest } = rule;
+      const { data, error } = id
+        ? await supabase.from('mapping_rules').update(rest as any).eq('id', id as string).select().single()
+        : await supabase.from('mapping_rules').insert(rest as any).select().single();
       if (error) throw error;
       return data;
     },
