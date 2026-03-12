@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useDataSources, useUpsertDataSource, useToggleSource, useTestFtpConnection, useFtpFetch, useTestPgpDecryption, useFtpBrowse, type FtpBrowserFile } from "@/hooks/use-pipeline";
+import { useDataSources, useUpsertDataSource, useToggleSource, useTestFtpConnection, useFtpFetch, useTestPgpDecryption, useFtpBrowse, FtpBrowseInvokeError, type FtpBrowserFile } from "@/hooks/use-pipeline";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -135,10 +135,38 @@ export default function SourcesPage() {
           }
         },
         onError: (err) => {
-          const message = err instanceof Error ? err.message : String(err);
+          const fallback = err instanceof Error ? err.message : String(err);
           setConnectionState("error");
-          setConnectionMessage("Unable to run FTP test. Check server logs for details.");
-          setDebugJson(JSON.stringify({ error: message }, null, 2));
+
+          if (err instanceof FtpBrowseInvokeError) {
+            if (err.errorCode === "FUNCTION_UNAVAILABLE") {
+              setConnectionMessage("Cannot reach FTP backend service. Verify FTP gateway deployment and URL.");
+            } else if (err.errorCode === "UNAUTHORIZED") {
+              setConnectionMessage("Your session is not authorized for FTP testing. Please sign in again.");
+            } else if (err.errorCode === "FTP_AUTH_FAILED") {
+              setConnectionMessage("FTP login failed. Check username/password.");
+            } else if (err.errorCode === "REMOTE_PATH_NOT_FOUND") {
+              setConnectionMessage("Remote FTP directory was not found or is inaccessible.");
+            } else if (err.errorCode === "NETWORK_TIMEOUT") {
+              setConnectionMessage("FTP server timed out. Check host/port/firewall configuration.");
+            } else if (err.errorCode === "NETWORK_UNREACHABLE") {
+              setConnectionMessage("FTP server is unreachable from backend runtime.");
+            } else {
+              setConnectionMessage(err.userMessage || fallback || "FTP request failed.");
+            }
+
+            setDebugJson(JSON.stringify({
+              error: err.message,
+              errorCode: err.errorCode,
+              userMessage: err.userMessage,
+              status: err.status,
+              details: err.details,
+            }, null, 2));
+            return;
+          }
+
+          setConnectionMessage("Unable to run FTP test due to an unexpected client error.");
+          setDebugJson(JSON.stringify({ error: fallback }, null, 2));
         },
       },
     );
