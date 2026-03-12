@@ -7,8 +7,8 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("admin@neuroquant.io");
-  const [password, setPassword] = useState("password");
+  const [email, setEmail] = useState("admin@admin.com");
+  const [password, setPassword] = useState("adminadmin");
   const [loading, setLoading] = useState(false);
   const { login, isAuthenticated, isAuthLoading } = useAuth();
   const navigate = useNavigate();

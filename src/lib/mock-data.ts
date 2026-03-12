@@ -183,11 +183,11 @@ export const mappingRules: MappingRule[] = [
 export const auditLog: AuditEntry[] = [
   { id: 'a1', timestamp: '2026-03-11T06:16:42Z', actor: 'system', eventType: 'import.completed', entityType: 'import_batch', entityId: 'ib6', source: 'scheduler', metadata: '{"rows":750,"errors":0}' },
   { id: 'a2', timestamp: '2026-03-11T06:15:00Z', actor: 'system', eventType: 'import.started', entityType: 'import_batch', entityId: 'ib6', source: 'scheduler', metadata: '{"file":"U1234567_20260311_activity.csv.pgp"}' },
-  { id: 'a3', timestamp: '2026-03-10T14:22:10Z', actor: 'admin@neuroquant.io', eventType: 'mapping.updated', entityType: 'mapping_rule', entityId: 'm5', source: 'ui', metadata: '{"field":"commission","change":"added abs() transform"}' },
+  { id: 'a3', timestamp: '2026-03-10T14:22:10Z', actor: 'admin@admin.com', eventType: 'mapping.updated', entityType: 'mapping_rule', entityId: 'm5', source: 'ui', metadata: '{"field":"commission","change":"added abs() transform"}' },
   { id: 'a4', timestamp: '2026-03-10T06:20:15Z', actor: 'system', eventType: 'import.failed', entityType: 'import_batch', entityId: 'ib4', source: 'scheduler', metadata: '{"error":"PGP decryption failed"}' },
   { id: 'a5', timestamp: '2026-03-10T06:16:42Z', actor: 'system', eventType: 'import.completed', entityType: 'import_batch', entityId: 'ib1', source: 'scheduler', metadata: '{"rows":850,"errors":3}' },
-  { id: 'a6', timestamp: '2026-03-09T11:05:00Z', actor: 'admin@neuroquant.io', eventType: 'source.updated', entityType: 'data_source', entityId: 's2', source: 'ui', metadata: '{"change":"updated polling schedule"}' },
-  { id: 'a7', timestamp: '2026-03-08T16:30:00Z', actor: 'admin@neuroquant.io', eventType: 'parser.versioned', entityType: 'parser_profile', entityId: 'pp1', source: 'ui', metadata: '{"version":4,"change":"updated date format"}' },
+  { id: 'a6', timestamp: '2026-03-09T11:05:00Z', actor: 'admin@admin.com', eventType: 'source.updated', entityType: 'data_source', entityId: 's2', source: 'ui', metadata: '{"change":"updated polling schedule"}' },
+  { id: 'a7', timestamp: '2026-03-08T16:30:00Z', actor: 'admin@admin.com', eventType: 'parser.versioned', entityType: 'parser_profile', entityId: 'pp1', source: 'ui', metadata: '{"version":4,"change":"updated date format"}' },
   { id: 'a8', timestamp: '2026-03-07T09:12:00Z', actor: 'ops@neuroquant.io', eventType: 'source.test', entityType: 'data_source', entityId: 's1', source: 'ui', metadata: '{"result":"success","latency":"1.2s"}' },
 ];
 

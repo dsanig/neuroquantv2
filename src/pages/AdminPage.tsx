@@ -22,7 +22,7 @@ export default function AdminPage() {
           <table className="data-table">
             <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Last Active</th></tr></thead>
             <tbody>
-              <tr><td className="font-sans text-foreground">admin@neuroquant.io</td><td>Admin</td><td><StatusBadge status="active" /></td><td>Just now</td></tr>
+              <tr><td className="font-sans text-foreground">admin@admin.com</td><td>Admin</td><td><StatusBadge status="active" /></td><td>Just now</td></tr>
               <tr><td className="font-sans text-foreground">ops@neuroquant.io</td><td>Operator</td><td><StatusBadge status="active" /></td><td>2 hours ago</td></tr>
               <tr><td className="font-sans text-foreground">viewer@neuroquant.io</td><td>Viewer</td><td><StatusBadge status="inactive" /></td><td>3 days ago</td></tr>
             </tbody>
