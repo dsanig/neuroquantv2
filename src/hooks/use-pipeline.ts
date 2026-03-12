@@ -112,18 +112,34 @@ export function useTestFtpConnection() {
 export function useFtpFetch() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (sourceId: string) => {
-      const { data, error } = await supabase.functions.invoke('ftp-fetch', { body: { sourceId } });
-      if (error) throw error;
-      return data;
+    mutationFn: async (params: string | { sourceId: string; testOnly?: boolean }) => {
+      const body = typeof params === 'string' ? { sourceId: params } : params;
+      const { data, error } = await supabase.functions.invoke('ftp-fetch', { body });
+      if (error) {
+        const payload = (error.context && typeof error.context === 'object'
+          ? error.context
+          : null) as { error?: string; errorCode?: string; userMessage?: string; status?: number } | null;
+        throw new FtpBrowseInvokeError({
+          status: payload?.status || 500,
+          message: payload?.error || error.message || 'FTP backend request failed.',
+          errorCode: payload?.errorCode,
+          userMessage: payload?.userMessage,
+          details: payload ?? error,
+        });
+      }
+      return data as FtpBrowseResponse;
     },
     onSuccess: (data) => {
-      if (data.success) {
-        toast.success(`Found ${data.fileCount} files`);
-        qc.invalidateQueries({ queryKey: ['data-sources'] });
-      } else {
+      if (!data.success) {
         toast.error(`Fetch failed: ${data.error}`);
+        return;
       }
+
+      if (!data.testOnly) {
+        toast.success(`Found ${data.fileCount} files`);
+      }
+
+      qc.invalidateQueries({ queryKey: ['data-sources'] });
     },
     onError: (e) => toast.error(`Fetch failed: ${e.message}`),
   });
@@ -132,11 +148,14 @@ export function useFtpFetch() {
 export type FtpBrowserFile = {
   name: string;
   fullPath: string;
+  directory?: string;
   extension: string;
   size: number | null;
   modifiedAt: string | null;
   isDirectory: boolean;
   permissions: string | null;
+  type?: string;
+  status?: string;
   raw: string;
 };
 
@@ -170,28 +189,6 @@ export class FtpBrowseInvokeError extends Error {
     this.userMessage = params.userMessage;
     this.details = params.details;
   }
-}
-
-export function useFtpBrowse() {
-  return useMutation({
-    mutationFn: async (params: { sourceId: string; testOnly?: boolean }) => {
-      const { data, error } = await supabase.functions.invoke('ftp-browse', { body: params });
-      if (error) {
-        const payload = (error.context && typeof error.context === 'object'
-          ? error.context
-          : null) as { error?: string; errorCode?: string; userMessage?: string; status?: number } | null;
-        throw new FtpBrowseInvokeError({
-          status: payload?.status || 500,
-          message: payload?.error || error.message || 'FTP backend request failed.',
-          errorCode: payload?.errorCode,
-          userMessage: payload?.userMessage,
-          details: payload ?? error,
-        });
-      }
-
-      return data as FtpBrowseResponse;
-    },
-  });
 }
 
 // ===== Parser Profiles =====

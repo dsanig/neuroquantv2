@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useDataSources, useUpsertDataSource, useToggleSource, useTestFtpConnection, useFtpFetch, useTestPgpDecryption, useFtpBrowse, FtpBrowseInvokeError, type FtpBrowserFile } from "@/hooks/use-pipeline";
+import { useDataSources, useUpsertDataSource, useToggleSource, useTestFtpConnection, useFtpFetch, useTestPgpDecryption, FtpBrowseInvokeError, type FtpBrowserFile } from "@/hooks/use-pipeline";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -50,7 +50,6 @@ export default function SourcesPage() {
   const testFtp = useTestFtpConnection();
   const fetchFtp = useFtpFetch();
   const testPgp = useTestPgpDecryption();
-  const ftpBrowse = useFtpBrowse();
 
   const ftpSources = useMemo(() => (sources || []).filter((s) => s.protocol === "FTP"), [sources]);
 
@@ -107,7 +106,7 @@ export default function SourcesPage() {
       return;
     }
 
-    ftpBrowse.mutate(
+    fetchFtp.mutate(
       { sourceId: selectedSourceId, testOnly },
       {
         onSuccess: (res) => {
@@ -145,9 +144,9 @@ export default function SourcesPage() {
               setConnectionMessage("Your session is not authorized for FTP testing. Please sign in again.");
             } else if (err.errorCode === "FTP_AUTH_FAILED") {
               setConnectionMessage("FTP login failed. Check username/password.");
-            } else if (err.errorCode === "REMOTE_PATH_NOT_FOUND" || err.errorCode === "BAD_PATH") {
+            } else if (err.errorCode === "REMOTE_PATH_NOT_FOUND" || err.errorCode === "BAD_PATH" || err.errorCode === "INVALID_PATH") {
               setConnectionMessage("Remote FTP directory was not found or is inaccessible.");
-            } else if (err.errorCode === "NETWORK_TIMEOUT") {
+            } else if (err.errorCode === "NETWORK_TIMEOUT" || err.errorCode === "TIMEOUT") {
               setConnectionMessage("FTP server timed out. Check host/port/firewall configuration.");
             } else if (err.errorCode === "NETWORK_UNREACHABLE" || err.errorCode === "BACKEND_UNAVAILABLE") {
               setConnectionMessage("FTP backend or server is unreachable from runtime.");
@@ -297,7 +296,7 @@ export default function SourcesPage() {
               </div>
               <div className="flex gap-2 mt-3">
                 <Button variant="outline" size="sm" className="text-xs flex-1" onClick={() => startEdit(s.id)}>Configure</Button>
-                <Button variant="outline" size="sm" className="text-xs" onClick={() => fetchFtp.mutate(s.id)} disabled={fetchFtp.isPending}>
+                <Button variant="outline" size="sm" className="text-xs" onClick={() => fetchFtp.mutate({ sourceId: s.id })} disabled={fetchFtp.isPending}>
                   {fetchFtp.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <TestTube className="h-3 w-3" />}
                 </Button>
                 <Button variant="outline" size="sm" className="text-xs" onClick={() => toggle.mutate({ id: s.id, active: !s.active })}>
@@ -420,12 +419,12 @@ export default function SourcesPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" variant="outline" onClick={() => runFtpTest(true)} disabled={ftpBrowse.isPending || !selectedSourceId}>
-              {ftpBrowse.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <TestTube className="h-3.5 w-3.5 mr-1.5" />}
+            <Button size="sm" variant="outline" onClick={() => runFtpTest(true)} disabled={fetchFtp.isPending || !selectedSourceId}>
+              {fetchFtp.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <TestTube className="h-3.5 w-3.5 mr-1.5" />}
               Test Connection
             </Button>
-            <Button size="sm" onClick={() => runFtpTest(false)} disabled={ftpBrowse.isPending || !selectedSourceId}>
-              {ftpBrowse.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
+            <Button size="sm" onClick={() => runFtpTest(false)} disabled={fetchFtp.isPending || !selectedSourceId}>
+              {fetchFtp.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
               Refresh File List
             </Button>
             <Badge variant={connectionState === "connected" ? "default" : connectionState === "error" ? "destructive" : "secondary"}>
@@ -488,7 +487,7 @@ export default function SourcesPage() {
                       <td className="px-3 py-2">{formatBytes(file.size)}</td>
                       <td className="px-3 py-2">{file.modifiedAt ? new Date(file.modifiedAt).toLocaleString() : "-"}</td>
                       <td className="px-3 py-2 font-mono">{file.fullPath}</td>
-                      <td className="px-3 py-2">{file.isDirectory ? "directory" : "file"}</td>
+                      <td className="px-3 py-2">{file.status || file.type || (file.isDirectory ? "directory" : "file")}</td>
                     </tr>
                   ))
                 )}
