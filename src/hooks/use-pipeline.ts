@@ -18,9 +18,10 @@ export function useUpsertDataSource() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (source: Record<string, unknown>) => {
-      const { data, error } = source.id
-        ? await supabase.from('data_sources').update(source).eq('id', source.id as string).select().single()
-        : await supabase.from('data_sources').insert(source).select().single();
+      const { id, ...rest } = source;
+      const { data, error } = id
+        ? await supabase.from('data_sources').update(rest as any).eq('id', id as string).select().single()
+        : await supabase.from('data_sources').insert(rest as any).select().single();
       if (error) throw error;
       return data;
     },
