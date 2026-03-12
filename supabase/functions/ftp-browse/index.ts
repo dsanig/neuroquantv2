@@ -31,6 +31,17 @@ function classifyFtpError(message: string) {
   return "Unable to connect to the FTP server. Please verify connection settings and try again.";
 }
 
+function classifyFtpErrorCode(message: string) {
+  const lower = message.toLowerCase();
+  if (lower.includes("timed out") || lower.includes("timeout")) return "NETWORK_TIMEOUT";
+  if (lower.includes("530") || lower.includes("auth")) return "FTP_AUTH_FAILED";
+  if (lower.includes("550") || lower.includes("no such") || lower.includes("not found")) return "REMOTE_PATH_NOT_FOUND";
+  if (lower.includes("permission") || lower.includes("denied")) return "FTP_PERMISSION_DENIED";
+  if (lower.includes("refused") || lower.includes("unreachable") || lower.includes("network") || lower.includes("enotfound") || lower.includes("econnrefused")) return "NETWORK_UNREACHABLE";
+  if (lower.includes("sftp") || lower.includes("ftps") || lower.includes("unsupported")) return "UNSUPPORTED_PROTOCOL";
+  return "FTP_RUNTIME_ERROR";
+}
+
 function toIsoDate(yearHint: number, month: string, day: string, timeOrYear: string) {
   const monthMap: Record<string, number> = {
     jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
@@ -141,7 +152,7 @@ serve(async (req) => {
   try {
     const { sourceId, testOnly } = await req.json();
     if (!sourceId) {
-      return new Response(JSON.stringify({ success: false, error: "Missing sourceId" }), {
+      return new Response(JSON.stringify({ success: false, errorCode: "INVALID_REQUEST", error: "Missing sourceId", userMessage: "Select an FTP source before running the test." }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -157,7 +168,7 @@ serve(async (req) => {
     });
     const { data: userData, error: authError } = await userClient.auth.getUser();
     if (authError || !userData.user) {
-      return new Response(JSON.stringify({ success: false, error: "Unauthorized" }), {
+      return new Response(JSON.stringify({ success: false, errorCode: "UNAUTHORIZED", error: "Unauthorized", userMessage: "Session expired. Please sign in again." }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -171,12 +182,21 @@ serve(async (req) => {
       .single();
 
     if (sourceError || !source) {
-      throw new Error(`Source not found: ${sourceError?.message ?? "unknown"}`);
+      return new Response(JSON.stringify({
+        success: false,
+        errorCode: "BAD_PATH",
+        error: `Source not found: ${sourceError?.message ?? "unknown"}`,
+        userMessage: "Selected source was not found.",
+      }), {
+        status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     if (source.protocol !== "FTP") {
       return new Response(JSON.stringify({
         success: false,
+        errorCode: "UNSUPPORTED_PROTOCOL",
         error: "Unsupported FTP mode for file browsing",
         userMessage: "Only FTP sources are supported by this test window right now.",
       }), {
@@ -230,6 +250,7 @@ serve(async (req) => {
         return new Response(JSON.stringify({
           success: true,
           testOnly: true,
+          mode: "test",
           banner,
           connectionStatus: "connected",
           latencyMs: Date.now() - startedAt,
@@ -279,9 +300,11 @@ serve(async (req) => {
       return new Response(JSON.stringify({
         success: true,
         connectionStatus: "connected",
+        mode: "list",
         source: { id: source.id, name: source.name },
         files,
         fileCount: files.length,
+        emptyDirectory: files.length === 0,
         listedAt: new Date().toISOString(),
         latencyMs: Date.now() - startedAt,
       }), {
@@ -305,13 +328,17 @@ serve(async (req) => {
         metadata: { error: technicalMessage },
       });
 
+      const errorCode = classifyFtpErrorCode(technicalMessage);
+      const status = errorCode === "UNSUPPORTED_PROTOCOL" ? 400 : 502;
+
       return new Response(JSON.stringify({
         success: false,
+        errorCode,
         error: technicalMessage,
         userMessage: classifyFtpError(technicalMessage),
         connectionStatus: "error",
       }), {
-        status: 400,
+        status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     } finally {
@@ -324,7 +351,7 @@ serve(async (req) => {
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
     console.error("ftp-browse request error", msg);
-    return new Response(JSON.stringify({ success: false, error: msg }), {
+    return new Response(JSON.stringify({ success: false, errorCode: "BACKEND_UNAVAILABLE", error: msg, userMessage: "FTP backend failed before running the request." }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

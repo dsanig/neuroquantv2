@@ -140,17 +140,21 @@ export default function SourcesPage() {
 
           if (err instanceof FtpBrowseInvokeError) {
             if (err.errorCode === "FUNCTION_UNAVAILABLE") {
-              setConnectionMessage("Cannot reach FTP backend service. Verify FTP gateway deployment and URL.");
+              setConnectionMessage("Cannot reach FTP backend service right now. Please retry shortly.");
             } else if (err.errorCode === "UNAUTHORIZED") {
               setConnectionMessage("Your session is not authorized for FTP testing. Please sign in again.");
             } else if (err.errorCode === "FTP_AUTH_FAILED") {
               setConnectionMessage("FTP login failed. Check username/password.");
-            } else if (err.errorCode === "REMOTE_PATH_NOT_FOUND") {
+            } else if (err.errorCode === "REMOTE_PATH_NOT_FOUND" || err.errorCode === "BAD_PATH") {
               setConnectionMessage("Remote FTP directory was not found or is inaccessible.");
             } else if (err.errorCode === "NETWORK_TIMEOUT") {
               setConnectionMessage("FTP server timed out. Check host/port/firewall configuration.");
-            } else if (err.errorCode === "NETWORK_UNREACHABLE") {
-              setConnectionMessage("FTP server is unreachable from backend runtime.");
+            } else if (err.errorCode === "NETWORK_UNREACHABLE" || err.errorCode === "BACKEND_UNAVAILABLE") {
+              setConnectionMessage("FTP backend or server is unreachable from runtime.");
+            } else if (err.errorCode === "UNSUPPORTED_PROTOCOL") {
+              setConnectionMessage("Unsupported protocol. This read-only window currently supports FTP sources only.");
+            } else if (err.errorCode === "FTP_PERMISSION_DENIED") {
+              setConnectionMessage("Permission denied for remote FTP directory.");
             } else {
               setConnectionMessage(err.userMessage || fallback || "FTP request failed.");
             }
