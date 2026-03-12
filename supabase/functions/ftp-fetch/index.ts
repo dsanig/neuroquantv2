@@ -302,6 +302,12 @@ serve(async (req) => {
         throw new Error(`AUTH_FAILED: ${userResponse}`);
       }
 
+      const cwdResponse = await sendCommand(conn, `CWD ${remotePath}`);
+      const cwdCode = parseCode(cwdResponse);
+      if (!cwdCode || cwdCode >= 400) {
+        throw new Error(`PATH_INVALID: ${cwdResponse}`);
+      }
+
       if (testOnly) {
         await sendCommand(conn, "QUIT");
 
@@ -316,6 +322,7 @@ serve(async (req) => {
           mode: "test",
           testOnly: true,
           connectionStatus: "connected",
+          pathUsed: remotePath,
           fileCount: 0,
           files: [],
           testedAt: new Date().toISOString(),
@@ -323,12 +330,6 @@ serve(async (req) => {
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
-      }
-
-      const cwdResponse = await sendCommand(conn, `CWD ${remotePath}`);
-      const cwdCode = parseCode(cwdResponse);
-      if (!cwdCode || cwdCode >= 400) {
-        throw new Error(`PATH_INVALID: ${cwdResponse}`);
       }
 
       const pasvResponse = await sendCommand(conn, "PASV");
@@ -339,7 +340,11 @@ serve(async (req) => {
       const dataPort = parsePasvResponse(pasvResponse);
       const dataConn = await withTimeout(Deno.connect({ hostname: host, port: dataPort }), DATA_TIMEOUT_MS, "TIMEOUT");
 
-      await sendCommand(conn, "LIST");
+      const listResponse = await sendCommand(conn, "LIST -a");
+      const listCode = parseCode(listResponse);
+      if (!listCode || listCode >= 400) {
+        await sendCommand(conn, "LIST");
+      }
 
       const decoder = new TextDecoder();
       const chunks: string[] = [];
@@ -393,9 +398,11 @@ serve(async (req) => {
         testOnly: false,
         connectionStatus: "connected",
         configuredPath: remotePath,
+        pathUsed: remotePath,
         sourceId,
         rawFileCount: rawEntries.length,
         normalizedFileCount: files.length,
+        displayedFileCount: files.length,
         droppedEntriesCount: droppedEntries.length,
         droppedEntriesPreview: droppedEntries.slice(0, 10),
         files,

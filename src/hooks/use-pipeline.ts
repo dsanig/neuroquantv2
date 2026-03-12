@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { extractFilenameDate } from '@/lib/filename-date';
 
 function isPermissionError(message?: string) {
   const normalized = (message || '').toLowerCase();
@@ -150,6 +151,7 @@ export type FtpBrowserFile = {
   extension: string | null;
   sizeBytes: number | null;
   modifiedAt: string | null;
+  extractedFilenameDate: string | null;
   path: string | null;
   type: string | null;
   status: string | null;
@@ -178,6 +180,7 @@ export type FtpBrowseResponse = {
   droppedEntriesCount?: number;
   droppedEntriesPreview?: Array<{ reason: string; raw: string }>;
   configuredPath?: string;
+  pathUsed?: string;
   sourceId?: string;
   emptyDirectory?: boolean;
   listedAt?: string;
@@ -220,6 +223,7 @@ function normalizeFtpFile(input: unknown): FtpBrowserFile | null {
       extension,
       sizeBytes: null,
       modifiedAt: null,
+      extractedFilenameDate: extractFilenameDate(name)?.isoDate ?? null,
       path: null,
       type: 'file',
       status: 'file',
@@ -277,6 +281,7 @@ function normalizeFtpFile(input: unknown): FtpBrowserFile | null {
     extension,
     sizeBytes,
     modifiedAt,
+    extractedFilenameDate: extractFilenameDate(name)?.isoDate ?? null,
     path,
     type,
     status,
@@ -305,6 +310,8 @@ function normalizeFtpBrowseResponse(payload: unknown): FtpBrowseResponse {
     fileCount: typeof raw.fileCount === 'number' ? raw.fileCount : files.length,
     normalizedFileCount: typeof raw.normalizedFileCount === 'number' ? raw.normalizedFileCount : files.length,
     rawFileCount: typeof raw.rawFileCount === 'number' ? raw.rawFileCount : sourceFiles.length,
+    pathUsed: typeof raw.pathUsed === 'string' ? raw.pathUsed : (typeof raw.configuredPath === 'string' ? raw.configuredPath : undefined),
+    displayedFileCount: typeof raw.displayedFileCount === 'number' ? raw.displayedFileCount : files.length,
     droppedEntriesCount: backendDroppedCount + droppedFromNormalization,
   };
 }
