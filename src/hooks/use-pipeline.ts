@@ -143,6 +143,7 @@ export type FtpBrowserFile = {
 export type FtpBrowseResponse = {
   success: boolean;
   connectionStatus: 'connected' | 'error';
+  errorCode?: string;
   files?: FtpBrowserFile[];
   fileCount?: number;
   listedAt?: string;
@@ -153,12 +154,78 @@ export type FtpBrowseResponse = {
   userMessage?: string;
 };
 
+export class FtpBrowseInvokeError extends Error {
+  status: number;
+  errorCode?: string;
+  userMessage?: string;
+  details?: unknown;
+
+  constructor(params: { message: string; status: number; errorCode?: string; userMessage?: string; details?: unknown }) {
+    super(params.message);
+    this.name = 'FtpBrowseInvokeError';
+    this.status = params.status;
+    this.errorCode = params.errorCode;
+    this.userMessage = params.userMessage;
+    this.details = params.details;
+  }
+}
+
 export function useFtpBrowse() {
   return useMutation({
     mutationFn: async (params: { sourceId: string; testOnly?: boolean }) => {
-      const { data, error } = await supabase.functions.invoke('ftp-browse', { body: params });
-      if (error) throw error;
-      return data as FtpBrowseResponse;
+      const gatewayBaseUrl = import.meta.env.VITE_FTP_GATEWAY_URL;
+      if (!gatewayBaseUrl) {
+        throw new FtpBrowseInvokeError({
+          status: 503,
+          message: 'FTP backend is not configured (missing VITE_FTP_GATEWAY_URL).',
+          errorCode: 'FUNCTION_UNAVAILABLE',
+          userMessage: 'FTP backend endpoint is not configured for this environment.',
+        });
+      }
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) {
+        throw new FtpBrowseInvokeError({
+          status: 401,
+          message: 'Missing user session token.',
+          errorCode: 'UNAUTHORIZED',
+          userMessage: 'Session expired. Please sign in again.',
+        });
+      }
+
+      const response = await fetch(`${gatewayBaseUrl.replace(/\/$/, '')}/ftp/browse`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(params),
+      });
+
+      let payload: FtpBrowseResponse | { error?: string; errorCode?: string; userMessage?: string } | null = null;
+      try {
+        payload = await response.json();
+      } catch {
+        throw new FtpBrowseInvokeError({
+          status: response.status,
+          message: 'FTP backend returned a non-JSON response.',
+          errorCode: 'RUNTIME_INITIALIZATION_FAILURE',
+          userMessage: 'FTP backend returned an invalid response.',
+        });
+      }
+
+      if (!response.ok) {
+        throw new FtpBrowseInvokeError({
+          status: response.status,
+          message: payload?.error || `FTP backend request failed with status ${response.status}`,
+          errorCode: payload?.errorCode,
+          userMessage: payload?.userMessage,
+          details: payload,
+        });
+      }
+
+      return payload as FtpBrowseResponse;
     },
   });
 }

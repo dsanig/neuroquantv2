@@ -71,3 +71,41 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+
+## FTP test/list backend architecture
+
+The FTP browse/test flow now uses a dedicated Node runtime service (`backend/ftp-gateway/server.mjs`) instead of relying on Supabase Edge Functions for FTP socket handling.
+
+### Why this architecture
+
+Supabase Edge Functions run on Deno edge runtime constraints where low-level FTP socket/data-channel behavior can fail at invocation/runtime boundaries for real FTP servers. The new gateway uses Node TCP sockets for reliable FTP control + passive data channel handling.
+
+### Required environment variables
+
+Frontend:
+
+- `VITE_FTP_GATEWAY_URL` (example: `http://localhost:8787`)
+
+FTP gateway backend:
+
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `FTP_GATEWAY_ALLOWED_ORIGIN` (optional, default `*`)
+- `FTP_GATEWAY_TIMEOUT_MS` (optional, default `10000`)
+- `PORT` (optional, default `8787`)
+
+### Running locally
+
+1. Run frontend as usual (`npm run dev`).
+2. In another terminal run FTP gateway:
+
+```sh
+npm run ftp-gateway
+```
+
+3. Ensure your browser app can reach `VITE_FTP_GATEWAY_URL`.
+
+### Deployment
+
+Deploy `backend/ftp-gateway/server.mjs` to a Node-capable backend (container/VM/serverless Node runtime) and set all backend env vars above. Then set `VITE_FTP_GATEWAY_URL` in your frontend environment to the deployed base URL.
