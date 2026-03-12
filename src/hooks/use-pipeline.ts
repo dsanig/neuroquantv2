@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { extractFilenameDate } from '@/lib/filename-date';
 
 function isPermissionError(message?: string) {
   const normalized = (message || '').toLowerCase();
@@ -10,326 +9,220 @@ function isPermissionError(message?: string) {
 
 async function requireAuthenticatedSession() {
   const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-  if (sessionError) {
-    console.error('Failed to get Supabase session before write operation.', sessionError);
-    throw new Error('SESSION_NOT_READY');
-  }
-
-  if (!sessionData.session) {
+  if (sessionError || !sessionData.session) {
     throw new Error('SESSION_NOT_READY');
   }
 
   const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError) {
-    console.error('Failed to get Supabase user before write operation.', userError);
-    throw new Error('SESSION_NOT_READY');
-  }
-
-  if (!userData.user) {
+  if (userError || !userData.user) {
     throw new Error('SESSION_NOT_READY');
   }
 
   return userData.user;
 }
 
-// ===== Data Sources =====
-export function useDataSources() {
+export type DatabaseConnection = {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  database_name: string;
+  username: string;
+  schema_name: string | null;
+  ssl_mode: string;
+  active: boolean;
+  enabled: boolean;
+  last_status: string;
+  last_connected_at: string | null;
+  last_error: string | null;
+};
+
+export type DatasetMapping = {
+  id: string;
+  dataset_key: string;
+  connection_id: string;
+  schema_name: string;
+  table_name: string;
+  active: boolean;
+  notes: string | null;
+};
+
+export type PostgresFunctionResponse = {
+  success: boolean;
+  error?: string;
+  message?: string;
+  schemas?: string[];
+  tables?: Array<{ schema: string; table: string; rowCount?: number | null }>;
+  columns?: Array<{ name: string; dataType: string }>;
+  rows?: Array<Record<string, unknown>>;
+};
+
+// ===== External PostgreSQL Connections =====
+export function useDatabaseConnections() {
   return useQuery({
-    queryKey: ['data-sources'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('data_sources').select('*').order('created_at');
+    queryKey: ['database-connections'],
+    queryFn: async (): Promise<DatabaseConnection[]> => {
+      const { data, error } = await supabase
+        .from('database_connections')
+        .select('id, name, host, port, database_name, username, schema_name, ssl_mode, active, enabled, last_status, last_connected_at, last_error')
+        .order('created_at');
       if (error) throw error;
-      return data;
+      return (data || []) as DatabaseConnection[];
     },
   });
 }
 
-export function useUpsertDataSource() {
+export function useDataSources() {
+  return useDatabaseConnections();
+}
+
+export function useUpsertDatabaseConnection() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (source: Record<string, unknown>) => {
+    mutationFn: async (connection: Record<string, unknown>) => {
       await requireAuthenticatedSession();
+      const { id, ...rest } = connection;
 
-      const { id, ...rest } = source;
-      const { data, error } = id
-        ? await supabase.from('data_sources').update(rest as any).eq('id', id as string).select().single()
-        : await supabase.from('data_sources').insert(rest as any).select().single();
+      const payload = { ...rest } as Record<string, unknown>;
+      if (payload.password_secret === '') {
+        delete payload.password_secret;
+      }
+
+      if (id) {
+        const { data, error } = await supabase.from('database_connections').update(payload as never).eq('id', id as string).select('id').single();
+        if (error) throw error;
+        return data;
+      }
+
+      const { data, error } = await supabase.from('database_connections').insert(payload as never).select('id').single();
       if (error) throw error;
       return data;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['data-sources'] });
-      toast.success('Source saved');
+      qc.invalidateQueries({ queryKey: ['database-connections'] });
+      toast.success('Database connection saved');
     },
     onError: (e: Error) => {
       if (e.message === 'SESSION_NOT_READY') {
         toast.error('Your session is not ready or has expired. Please sign in again.');
         return;
       }
-
       if (isPermissionError(e.message)) {
-        toast.error('You do not have permission to save this source configuration.');
+        toast.error('You do not have permission to save this database connection.');
         return;
       }
-
-      console.error('Unexpected source save error.', e);
       toast.error('Save failed. Please try again.');
     },
   });
 }
 
-export function useToggleSource() {
+export function useToggleDatabaseConnection() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, active }: { id: string; active: boolean }) => {
-      const { error } = await supabase.from('data_sources').update({ active }).eq('id', id);
+    mutationFn: async ({ id, enabled }: { id: string; enabled: boolean }) => {
+      const { error } = await supabase.from('database_connections').update({ enabled }).eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['data-sources'] });
-      toast.success('Source updated');
+      qc.invalidateQueries({ queryKey: ['database-connections'] });
+      toast.success('Connection updated');
     },
   });
 }
 
-export function useTestFtpConnection() {
+export function useToggleSource() {
+  return useToggleDatabaseConnection();
+}
+
+export function useTestPostgresConnection() {
+  const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (params: { host: string; port: number; username: string; password?: string; protocol: string }) => {
-      const { data, error } = await supabase.functions.invoke('ftp-test', { body: params });
+    mutationFn: async (connectionId: string): Promise<PostgresFunctionResponse> => {
+      const { data, error } = await supabase.functions.invoke('postgres-ops', {
+        body: { action: 'test_connection', connectionId },
+      });
+      if (error) throw error;
+      return data as PostgresFunctionResponse;
+    },
+    onSuccess: (data) => {
+      if (data.success) toast.success(data.message || 'Connection successful');
+      else toast.error(data.error || 'Connection test failed');
+      qc.invalidateQueries({ queryKey: ['database-connections'] });
+    },
+    onError: (e: Error) => toast.error(`Connection test failed: ${e.message}`),
+  });
+}
+
+export function useInspectDatabaseConnection() {
+  return useMutation({
+    mutationFn: async (connectionId: string): Promise<PostgresFunctionResponse> => {
+      const { data, error } = await supabase.functions.invoke('postgres-ops', {
+        body: { action: 'inspect_tables', connectionId },
+      });
+      if (error) throw error;
+      return data as PostgresFunctionResponse;
+    },
+    onError: (e: Error) => toast.error(`Inspection failed: ${e.message}`),
+  });
+}
+
+export function usePreviewDatabaseTable() {
+  return useMutation({
+    mutationFn: async (params: { connectionId: string; schema: string; table: string; limit?: number }): Promise<PostgresFunctionResponse> => {
+      const { data, error } = await supabase.functions.invoke('postgres-ops', {
+        body: { action: 'preview_table', ...params },
+      });
+      if (error) throw error;
+      return data as PostgresFunctionResponse;
+    },
+    onError: (e: Error) => toast.error(`Preview failed: ${e.message}`),
+  });
+}
+
+export function useDatasetMappings(connectionId?: string) {
+  return useQuery({
+    queryKey: ['dataset-mappings', connectionId],
+    queryFn: async (): Promise<DatasetMapping[]> => {
+      let q = supabase.from('dataset_mappings').select('*').order('dataset_key');
+      if (connectionId) q = q.eq('connection_id', connectionId);
+      const { data, error } = await q;
+      if (error) throw error;
+      return (data || []) as DatasetMapping[];
+    },
+  });
+}
+
+export function useUpsertDatasetMapping() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (mapping: Record<string, unknown>) => {
+      const { id, ...rest } = mapping;
+      const { data, error } = id
+        ? await supabase.from('dataset_mappings').update(rest as never).eq('id', id as string).select('id').single()
+        : await supabase.from('dataset_mappings').insert(rest as never).select('id').single();
       if (error) throw error;
       return data;
     },
-    onSuccess: (data) => {
-      if (data.success) {
-        toast.success(`Connected! Latency: ${data.latency}`, { description: data.banner });
-      } else {
-        toast.error(`Connection failed: ${data.error}`);
-      }
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['dataset-mappings'] });
+      toast.success('Dataset mapping saved');
     },
-    onError: (e) => toast.error(`Test failed: ${e.message}`),
+    onError: (e: Error) => toast.error(`Save failed: ${e.message}`),
   });
 }
 
-export function useFtpFetch() {
+export function useDeleteDatasetMapping() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (params: string | { sourceId: string; testOnly?: boolean }) => {
-      const body = typeof params === 'string' ? { sourceId: params } : params;
-      const { data, error } = await supabase.functions.invoke('ftp-fetch', { body });
-      if (error) {
-        const payload = (error.context && typeof error.context === 'object'
-          ? error.context
-          : null) as { error?: string; errorCode?: string; userMessage?: string; status?: number } | null;
-        throw new FtpBrowseInvokeError({
-          status: payload?.status || 500,
-          message: payload?.error || error.message || 'FTP backend request failed.',
-          errorCode: payload?.errorCode,
-          userMessage: payload?.userMessage,
-          details: payload ?? error,
-        });
-      }
-      return normalizeFtpBrowseResponse(data);
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('dataset_mappings').delete().eq('id', id);
+      if (error) throw error;
     },
-    onSuccess: (data) => {
-      if (!data.success) {
-        toast.error(`Fetch failed: ${data.error}`);
-        return;
-      }
-
-      if (!data.testOnly) {
-        toast.success(`Found ${data.fileCount} files`);
-      }
-
-      qc.invalidateQueries({ queryKey: ['data-sources'] });
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['dataset-mappings'] });
+      toast.success('Dataset mapping removed');
     },
-    onError: (e) => toast.error(`Fetch failed: ${e.message}`),
   });
-}
-
-export type FtpBrowserFile = {
-  name: string;
-  extension: string | null;
-  sizeBytes: number | null;
-  modifiedAt: string | null;
-  extractedFilenameDate: string | null;
-  path: string | null;
-  type: string | null;
-  status: string | null;
-  rights: string | null;
-  owner: string | null;
-  raw?: unknown;
-
-  // Backward-compatible fields used in existing UI code paths.
-  fullPath: string;
-  directory?: string;
-  size: number | null;
-  isDirectory: boolean;
-  permissions: string | null;
-};
-
-export type FtpBrowseResponse = {
-  success: boolean;
-  connectionStatus: 'connected' | 'error';
-  errorCode?: string;
-  mode?: 'test' | 'list';
-  files?: FtpBrowserFile[];
-  fileCount?: number;
-  rawFileCount?: number;
-  normalizedFileCount?: number;
-  displayedFileCount?: number;
-  droppedEntriesCount?: number;
-  droppedEntriesPreview?: Array<{ reason: string; raw: string }>;
-  configuredPath?: string;
-  pathUsed?: string;
-  sourceId?: string;
-  emptyDirectory?: boolean;
-  listedAt?: string;
-  testedAt?: string;
-  latencyMs?: number;
-  testOnly?: boolean;
-  error?: string;
-  userMessage?: string;
-};
-
-function extractExtension(name: string): string | null {
-  const trimmed = name.trim();
-  const lastDot = trimmed.lastIndexOf('.');
-  if (lastDot <= 0 || lastDot === trimmed.length - 1) return null;
-  return trimmed.slice(lastDot + 1).toLowerCase();
-}
-
-function toNullableNumber(value: unknown): number | null {
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-}
-
-function toNullableDate(value: unknown): string | null {
-  if (typeof value !== 'string' && typeof value !== 'number') return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
-}
-
-function normalizeFtpFile(input: unknown): FtpBrowserFile | null {
-  if (typeof input === 'string') {
-    const name = input.trim();
-    if (!name) return null;
-    const extension = extractExtension(name);
-    return {
-      name,
-      extension,
-      sizeBytes: null,
-      modifiedAt: null,
-      extractedFilenameDate: extractFilenameDate(name)?.isoDate ?? null,
-      path: null,
-      type: 'file',
-      status: 'file',
-      rights: null,
-      owner: null,
-      raw: input,
-      fullPath: name,
-      directory: '',
-      size: null,
-      isDirectory: false,
-      permissions: null,
-    };
-  }
-
-  if (!input || typeof input !== 'object') return null;
-
-  const row = input as Record<string, unknown>;
-  const path = typeof row.path === 'string'
-    ? row.path
-    : typeof row.fullPath === 'string'
-      ? row.fullPath
-      : typeof row.filePath === 'string'
-        ? row.filePath
-        : null;
-
-  const nameFromPath = path?.split('/').filter(Boolean).pop() ?? null;
-  const rawLine = typeof row.raw === 'string' ? row.raw.trim() : null;
-  const rawTail = rawLine ? rawLine.split(/\s+/).pop() ?? null : null;
-  const name = (typeof row.name === 'string' && row.name.trim())
-    || (typeof row.filename === 'string' && row.filename.trim())
-    || nameFromPath
-    || rawTail
-    || null;
-  if (!name) return null;
-
-  const extension = typeof row.extension === 'string' && row.extension.trim()
-    ? row.extension.toLowerCase()
-    : extractExtension(name);
-
-  const sizeBytes = toNullableNumber(row.sizeBytes ?? row.size ?? row.bytes);
-  const modifiedAt = toNullableDate(row.modifiedAt ?? row.modified ?? row.mtime ?? row.date);
-  const type = typeof row.type === 'string' ? row.type : (row.isDirectory ? 'directory' : 'file');
-  const status = typeof row.status === 'string' ? row.status : (type === 'directory' ? 'directory' : 'file');
-  const rights = typeof row.rights === 'string'
-    ? row.rights
-    : typeof row.permissions === 'string'
-      ? row.permissions
-      : null;
-  const directory = typeof row.directory === 'string'
-    ? row.directory
-    : (path?.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '');
-
-  return {
-    name,
-    extension,
-    sizeBytes,
-    modifiedAt,
-    extractedFilenameDate: extractFilenameDate(name)?.isoDate ?? null,
-    path,
-    type,
-    status,
-    rights,
-    owner: typeof row.owner === 'string' ? row.owner : null,
-    raw: row.raw ?? input,
-    fullPath: path ?? name,
-    directory,
-    size: sizeBytes,
-    isDirectory: type === 'directory' || Boolean(row.isDirectory),
-    permissions: rights,
-  };
-}
-
-function normalizeFtpBrowseResponse(payload: unknown): FtpBrowseResponse {
-  const raw = (payload && typeof payload === 'object' ? payload : {}) as Record<string, unknown>;
-  const sourceFiles = Array.isArray(raw.files) ? raw.files : [];
-  const normalized = sourceFiles.map((item) => normalizeFtpFile(item));
-  const files = normalized.filter((item): item is FtpBrowserFile => Boolean(item));
-  const droppedFromNormalization = normalized.length - files.length;
-  const backendDroppedCount = typeof raw.droppedEntriesCount === 'number' ? raw.droppedEntriesCount : 0;
-
-  return {
-    ...(raw as FtpBrowseResponse),
-    files,
-    fileCount: typeof raw.fileCount === 'number' ? raw.fileCount : files.length,
-    normalizedFileCount: typeof raw.normalizedFileCount === 'number' ? raw.normalizedFileCount : files.length,
-    rawFileCount: typeof raw.rawFileCount === 'number' ? raw.rawFileCount : sourceFiles.length,
-    pathUsed: typeof raw.pathUsed === 'string' ? raw.pathUsed : (typeof raw.configuredPath === 'string' ? raw.configuredPath : undefined),
-    displayedFileCount: typeof raw.displayedFileCount === 'number' ? raw.displayedFileCount : files.length,
-    droppedEntriesCount: backendDroppedCount + droppedFromNormalization,
-  };
-}
-
-export class FtpBrowseInvokeError extends Error {
-  status: number;
-  errorCode?: string;
-  userMessage?: string;
-  details?: unknown;
-
-  constructor(params: { message: string; status: number; errorCode?: string; userMessage?: string; details?: unknown }) {
-    super(params.message);
-    this.name = 'FtpBrowseInvokeError';
-    this.status = params.status;
-    this.errorCode = params.errorCode;
-    this.userMessage = params.userMessage;
-    this.details = params.details;
-  }
 }
 
 // ===== Parser Profiles =====
@@ -498,7 +391,7 @@ export function useParseFile() {
 export function useRunImport() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (params: { sourceId: string; fileContent: string; fileName: string }) => {
+    mutationFn: async (params: { profileId: string; fileContent: string; fileName?: string }) => {
       const { data, error } = await supabase.functions.invoke('run-import', { body: params });
       if (error) throw error;
       return data;
@@ -507,30 +400,11 @@ export function useRunImport() {
       if (data.success) {
         toast.success(`Pipeline complete: ${data.importedRows || 0} rows imported`);
         qc.invalidateQueries({ queryKey: ['import-batches'] });
-        qc.invalidateQueries({ queryKey: ['data-sources'] });
-      } else {
+              } else {
         toast.error(`Import failed: ${data.error}`);
       }
     },
     onError: (e) => toast.error(`Pipeline failed: ${e.message}`),
-  });
-}
-
-export function useTestPgpDecryption() {
-  return useMutation({
-    mutationFn: async (params: { encryptedData?: string; pgpPrivateKey: string; passphrase?: string; testOnly?: boolean }) => {
-      const { data, error } = await supabase.functions.invoke('pgp-decrypt', { body: params });
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: (data) => {
-      if (data.testResult) {
-        toast.success(data.testResult.message);
-      } else {
-        toast.success('Decryption successful');
-      }
-    },
-    onError: (e) => toast.error(`Decryption test failed: ${e.message}`),
   });
 }
 

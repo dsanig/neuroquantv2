@@ -1,12 +1,6 @@
 project_id = "qfgvgpyzydtkpuotkvbn"
 
-[functions.ftp-test]
-verify_jwt = false
-
-[functions.ftp-fetch]
-verify_jwt = false
-
-[functions.pgp-decrypt]
+[functions.postgres-ops]
 verify_jwt = false
 
 [functions.parse-file]
@@ -14,6 +8,3 @@ verify_jwt = false
 
 [functions.run-import]
 verify_jwt = false
-
-[functions.ftp-browse]
-verify_jwt = true

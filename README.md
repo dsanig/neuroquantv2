@@ -72,19 +72,19 @@ To connect a domain, navigate to Project > Settings > Domains and click Connect 
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
 
-## FTP test/list backend architecture
+## External PostgreSQL backend architecture
 
-The regular FTP test and the FTP Test Window both use Supabase Edge Functions now:
+NeuroQuant now uses a Supabase Edge Function (`postgres-ops`) as a secure server-side bridge for external PostgreSQL operations:
 
-- `ftp-test` for lightweight connection checks.
-- `ftp-fetch` for read-only connect + directory listing (`testOnly` mode and list mode).
+- `test_connection` validates network reachability + credentials.
+- `inspect_tables` returns non-system schemas/tables (+ estimated row counts).
+- `preview_table` returns a small read-only sample for UI previews.
+
+Database credentials are stored in `database_connections` and never echoed back in normal UI list reads.
 
 ### Required environment variables
-
-No dedicated frontend FTP gateway variable is required for this flow (the window no longer depends on `VITE_FTP_GATEWAY_URL`).
 
 Supabase function environment:
 
 - `SUPABASE_URL`
-- `SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`

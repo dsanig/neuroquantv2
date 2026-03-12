@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { useImportBatches, useImportErrors, useRawRows, useNormalizedRecords, useParseFile, useRunImport, useDataSources, useParserProfiles } from "@/hooks/use-pipeline";
+import { useImportBatches, useImportErrors, useRawRows, useNormalizedRecords, useParseFile, useParserProfiles } from "@/hooks/use-pipeline";
 import { StatusBadge } from "@/components/StatusBadge";
 import { MetricCard } from "@/components/MetricCard";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,6 @@ export default function ImportsPage() {
   const [showUpload, setShowUpload] = useState(false);
   const [uploadContent, setUploadContent] = useState('');
   const [uploadFileName, setUploadFileName] = useState('');
-  const [selectedSourceId, setSelectedSourceId] = useState('');
   const [selectedProfileId, setSelectedProfileId] = useState('');
   const [viewTab, setViewTab] = useState<'errors' | 'raw' | 'normalized'>('errors');
   const fileRef = useRef<HTMLInputElement>(null);
@@ -19,10 +18,8 @@ export default function ImportsPage() {
   const { data: errors } = useImportErrors(selectedBatch || undefined);
   const { data: rawRows } = useRawRows(selectedBatch || undefined);
   const { data: normalizedRecords } = useNormalizedRecords(selectedBatch || undefined);
-  const { data: sources } = useDataSources();
   const { data: profiles } = useParserProfiles();
   const parseFile = useParseFile();
-  const runImport = useRunImport();
 
   const selected = batches?.find(b => b.id === selectedBatch);
 
@@ -43,35 +40,19 @@ export default function ImportsPage() {
 
   const handleImport = (dryRun: boolean) => {
     if (!uploadContent || !selectedProfileId) return;
-    if (selectedSourceId) {
-      runImport.mutate({
-        sourceId: selectedSourceId,
-        fileContent: uploadContent,
-        fileName: uploadFileName,
-      }, {
-        onSuccess: () => {
-          if (!dryRun) {
-            setShowUpload(false);
-            setUploadContent('');
-            refetch();
-          }
-        },
-      });
-    } else {
-      parseFile.mutate({
-        fileContent: uploadContent,
-        profileId: selectedProfileId,
-        dryRun,
-      }, {
-        onSuccess: () => {
-          if (!dryRun) {
-            setShowUpload(false);
-            setUploadContent('');
-            refetch();
-          }
-        },
-      });
-    }
+    parseFile.mutate({
+      fileContent: uploadContent,
+      profileId: selectedProfileId,
+      dryRun,
+    }, {
+      onSuccess: () => {
+        if (!dryRun) {
+          setShowUpload(false);
+          setUploadContent('');
+          refetch();
+        }
+      },
+    });
   };
 
   const handleReprocess = () => {
@@ -113,14 +94,7 @@ export default function ImportsPage() {
             <h2 className="text-foreground font-semibold">Import File</h2>
             <Button variant="ghost" size="sm" onClick={() => setShowUpload(false)}>Close</Button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            <div>
-              <label className="config-label">Source (optional)</label>
-              <select value={selectedSourceId} onChange={e => setSelectedSourceId(e.target.value)} className="w-full bg-secondary border border-border text-foreground text-sm rounded-md px-3 py-2">
-                <option value="">Manual Upload</option>
-                {(sources || []).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
               <label className="config-label">Parser Profile</label>
               <select value={selectedProfileId} onChange={e => setSelectedProfileId(e.target.value)} className="w-full bg-secondary border border-border text-foreground text-sm rounded-md px-3 py-2">
@@ -131,7 +105,7 @@ export default function ImportsPage() {
             <div>
               <label className="config-label">File</label>
               <div className="flex gap-2">
-                <input ref={fileRef} type="file" accept=".csv,.xml,.tsv,.txt,.pgp" onChange={handleFileUpload} className="hidden" />
+                <input ref={fileRef} type="file" accept=".csv,.xml,.tsv,.txt" onChange={handleFileUpload} className="hidden" />
                 <Button variant="outline" size="sm" className="text-xs" onClick={() => fileRef.current?.click()}>
                   Choose File
                 </Button>
@@ -156,8 +130,8 @@ export default function ImportsPage() {
               {parseFile.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <Eye className="h-3 w-3 mr-1.5" />}
               Dry Run
             </Button>
-            <Button size="sm" onClick={() => handleImport(false)} disabled={!uploadContent || !selectedProfileId || parseFile.isPending || runImport.isPending}>
-              {(parseFile.isPending || runImport.isPending) ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <Upload className="h-3 w-3 mr-1.5" />}
+            <Button size="sm" onClick={() => handleImport(false)} disabled={!uploadContent || !selectedProfileId || parseFile.isPending}>
+              {parseFile.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <Upload className="h-3 w-3 mr-1.5" />}
               Run Import
             </Button>
           </div>
