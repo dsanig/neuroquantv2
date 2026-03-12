@@ -101,9 +101,10 @@ export function useUpsertParserProfile() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (profile: Record<string, unknown>) => {
-      const { data, error } = profile.id
-        ? await supabase.from('parser_profiles').update(profile).eq('id', profile.id as string).select().single()
-        : await supabase.from('parser_profiles').insert(profile).select().single();
+      const { id, ...rest } = profile;
+      const { data, error } = id
+        ? await supabase.from('parser_profiles').update(rest as any).eq('id', id as string).select().single()
+        : await supabase.from('parser_profiles').insert(rest as any).select().single();
       if (error) throw error;
       return data;
     },
