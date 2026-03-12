@@ -172,6 +172,13 @@ export type FtpBrowseResponse = {
   mode?: 'test' | 'list';
   files?: FtpBrowserFile[];
   fileCount?: number;
+  rawFileCount?: number;
+  normalizedFileCount?: number;
+  displayedFileCount?: number;
+  droppedEntriesCount?: number;
+  droppedEntriesPreview?: Array<{ reason: string; raw: string }>;
+  configuredPath?: string;
+  sourceId?: string;
   emptyDirectory?: boolean;
   listedAt?: string;
   testedAt?: string;
@@ -239,9 +246,12 @@ function normalizeFtpFile(input: unknown): FtpBrowserFile | null {
         : null;
 
   const nameFromPath = path?.split('/').filter(Boolean).pop() ?? null;
+  const rawLine = typeof row.raw === 'string' ? row.raw.trim() : null;
+  const rawTail = rawLine ? rawLine.split(/\s+/).pop() ?? null : null;
   const name = (typeof row.name === 'string' && row.name.trim())
     || (typeof row.filename === 'string' && row.filename.trim())
     || nameFromPath
+    || rawTail
     || null;
   if (!name) return null;
 
@@ -283,14 +293,19 @@ function normalizeFtpFile(input: unknown): FtpBrowserFile | null {
 
 function normalizeFtpBrowseResponse(payload: unknown): FtpBrowseResponse {
   const raw = (payload && typeof payload === 'object' ? payload : {}) as Record<string, unknown>;
-  const files = Array.isArray(raw.files)
-    ? raw.files.map((item) => normalizeFtpFile(item)).filter((item): item is FtpBrowserFile => Boolean(item))
-    : [];
+  const sourceFiles = Array.isArray(raw.files) ? raw.files : [];
+  const normalized = sourceFiles.map((item) => normalizeFtpFile(item));
+  const files = normalized.filter((item): item is FtpBrowserFile => Boolean(item));
+  const droppedFromNormalization = normalized.length - files.length;
+  const backendDroppedCount = typeof raw.droppedEntriesCount === 'number' ? raw.droppedEntriesCount : 0;
 
   return {
     ...(raw as FtpBrowseResponse),
     files,
     fileCount: typeof raw.fileCount === 'number' ? raw.fileCount : files.length,
+    normalizedFileCount: typeof raw.normalizedFileCount === 'number' ? raw.normalizedFileCount : files.length,
+    rawFileCount: typeof raw.rawFileCount === 'number' ? raw.rawFileCount : sourceFiles.length,
+    droppedEntriesCount: backendDroppedCount + droppedFromNormalization,
   };
 }
 

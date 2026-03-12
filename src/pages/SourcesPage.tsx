@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useDataSources, useUpsertDataSource, useToggleSource, useTestFtpConnection, useFtpFetch, useTestPgpDecryption, FtpBrowseInvokeError, type FtpBrowserFile } from "@/hooks/use-pipeline";
+import { useDataSources, useUpsertDataSource, useToggleSource, useTestFtpConnection, useFtpFetch, useTestPgpDecryption, FtpBrowseInvokeError, type FtpBrowserFile, type FtpBrowseResponse } from "@/hooks/use-pipeline";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -48,6 +48,7 @@ export default function SourcesPage() {
   const [connectionMessage, setConnectionMessage] = useState<string>("No FTP test run yet.");
   const [files, setFiles] = useState<FtpBrowserFile[]>([]);
   const [lastRefreshAt, setLastRefreshAt] = useState<string | null>(null);
+  const [lastListResponse, setLastListResponse] = useState<FtpBrowseResponse | null>(null);
   const [debugJson, setDebugJson] = useState<string>("");
 
   const { data: sources, isLoading, refetch } = useDataSources();
@@ -117,6 +118,7 @@ export default function SourcesPage() {
       { sourceId: selectedSourceId, testOnly },
       {
         onSuccess: (res) => {
+          setLastListResponse(res);
           setDebugJson(JSON.stringify(res, null, 2));
           if (!res.success) {
             setConnectionState("error");
@@ -132,7 +134,7 @@ export default function SourcesPage() {
           setConnectionMessage(
             testOnly
               ? `Connection successful (${res.latencyMs ?? 0} ms).`
-              : `Connection successful. Retrieved ${res.fileCount ?? 0} files.`,
+              : `Connection successful. Retrieved ${res.normalizedFileCount ?? res.fileCount ?? 0} files.`,
           );
 
           if (!testOnly) {
@@ -172,11 +174,13 @@ export default function SourcesPage() {
               status: err.status,
               details: err.details,
             }, null, 2));
+            setLastListResponse(null);
             return;
           }
 
           setConnectionMessage("Unable to run FTP test due to an unexpected client error.");
           setDebugJson(JSON.stringify({ error: fallback }, null, 2));
+          setLastListResponse(null);
         },
       },
     );
@@ -463,7 +467,12 @@ export default function SourcesPage() {
           </div>
 
           <div className="flex justify-between text-xs text-muted-foreground">
-            <span>Total files: {filteredFiles.length}</span>
+            <span>
+              Displayed: {filteredFiles.length}
+              {connectionState === "connected"
+                ? ` / Normalized: ${lastListResponse?.normalizedFileCount ?? files.length} / Raw: ${lastListResponse?.rawFileCount ?? files.length}`
+                : ""}
+            </span>
             <span>Last refresh: {lastRefreshAt ? new Date(lastRefreshAt).toLocaleString() : "-"}</span>
           </div>
 
@@ -504,7 +513,16 @@ export default function SourcesPage() {
 
           <details>
             <summary className="text-xs text-muted-foreground cursor-pointer">Raw JSON debug view</summary>
-            <pre className="mt-2 p-3 rounded-md bg-secondary text-xs overflow-x-auto border border-border">{debugJson || "No debug payload yet."}</pre>
+            <pre className="mt-2 p-3 rounded-md bg-secondary text-xs overflow-x-auto border border-border">{debugJson || JSON.stringify({
+              configuredPath: selectedSource?.remote_path || null,
+              sourceId: selectedSourceId || null,
+              rawFileCount: lastListResponse?.rawFileCount ?? files.length,
+              normalizedFileCount: lastListResponse?.normalizedFileCount ?? files.length,
+              displayedFileCount: filteredFiles.length,
+              droppedEntriesCount: lastListResponse?.droppedEntriesCount ?? 0,
+              droppedEntriesPreview: lastListResponse?.droppedEntriesPreview ?? [],
+              activeFilters: { searchTerm, extensionFilter, dateFilter, sortField, sortDirection },
+            }, null, 2)}</pre>
           </details>
         </DialogContent>
       </Dialog>

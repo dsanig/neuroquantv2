@@ -23,6 +23,11 @@ type FtpListFile = {
   raw: string;
 };
 
+type DroppedEntry = {
+  reason: string;
+  raw: string;
+};
+
 type ClassifiedError = {
   errorCode:
     | "BACKEND_INVOKE_FAILURE"
@@ -96,59 +101,101 @@ function toIsoDate(year: number, month: number, day: number, hh = 0, mm = 0): st
   return new Date(Date.UTC(year, month, day, hh, mm, 0, 0)).toISOString();
 }
 
-function parseUnixListLine(line: string, hostPath: string): FtpListFile | null {
-  const parts = line.trim().split(/\s+/);
-  if (parts.length < 9) return null;
+function parseListLine(line: string, hostPath: string): FtpListFile | null {
+  const trimmed = line.trim();
+  if (!trimmed) return null;
 
-  const permissions = parts[0] || null;
-  const isDirectory = permissions?.startsWith("d") || false;
-  const size = Number(parts[4]);
-  const monthStr = parts[5];
-  const day = Number(parts[6]);
-  const timeOrYear = parts[7];
-  const name = parts.slice(8).join(" ");
-  if (!name || name === "." || name === "..") return null;
+  const unixMatch = trimmed.match(/^(?<permissions>[\-dlpscbD][rwx\-]{9})\s+\d+\s+\S+\s+\S+\s+(?<size>\d+)\s+(?<month>[A-Za-z]{3})\s+(?<day>\d{1,2})\s+(?<timeOrYear>\d{2}:\d{2}|\d{4})\s+(?<name>.+)$/);
+  if (unixMatch?.groups?.name) {
+    const name = unixMatch.groups.name.trim();
+    if (!name || name === "." || name === "..") return null;
 
-  const monthMap: Record<string, number> = {
-    jan: 0,
-    feb: 1,
-    mar: 2,
-    apr: 3,
-    may: 4,
-    jun: 5,
-    jul: 6,
-    aug: 7,
-    sep: 8,
-    oct: 9,
-    nov: 10,
-    dec: 11,
-  };
+    const monthMap: Record<string, number> = {
+      jan: 0,
+      feb: 1,
+      mar: 2,
+      apr: 3,
+      may: 4,
+      jun: 5,
+      jul: 6,
+      aug: 7,
+      sep: 8,
+      oct: 9,
+      nov: 10,
+      dec: 11,
+    };
 
-  const month = monthMap[(monthStr || "").toLowerCase()];
-  let modifiedAt: string | null = null;
+    const month = monthMap[(unixMatch.groups.month || "").toLowerCase()];
+    const day = Number(unixMatch.groups.day);
+    let modifiedAt: string | null = null;
 
-  if (Number.isFinite(day) && Number.isFinite(month)) {
-    if (/^\d{1,2}:\d{2}$/.test(timeOrYear)) {
-      const [hh, mm] = timeOrYear.split(":").map(Number);
-      modifiedAt = toIsoDate(new Date().getUTCFullYear(), month, day, hh, mm);
-    } else if (/^\d{4}$/.test(timeOrYear)) {
-      modifiedAt = toIsoDate(Number(timeOrYear), month, day);
+    if (Number.isFinite(day) && Number.isFinite(month)) {
+      const timeOrYear = unixMatch.groups.timeOrYear;
+      if (/^\d{1,2}:\d{2}$/.test(timeOrYear)) {
+        const [hh, mm] = timeOrYear.split(":").map(Number);
+        modifiedAt = toIsoDate(new Date().getUTCFullYear(), month, day, hh, mm);
+      } else if (/^\d{4}$/.test(timeOrYear)) {
+        modifiedAt = toIsoDate(Number(timeOrYear), month, day);
+      }
     }
+
+    const extension = name.includes(".") ? name.split(".").pop() || "" : "";
+    const normalizedPath = hostPath.endsWith("/") ? `${hostPath}${name}` : `${hostPath}/${name}`;
+
+    return {
+      name,
+      extension,
+      size: Number(unixMatch.groups.size),
+      modifiedAt,
+      fullPath: normalizedPath,
+      directory: hostPath,
+      isDirectory: unixMatch.groups.permissions.startsWith("d"),
+      permissions: unixMatch.groups.permissions,
+      type: unixMatch.groups.permissions.startsWith("d") ? "directory" : "file",
+      status: "ok",
+      raw: line,
+    };
   }
 
-  const extension = name.includes(".") ? name.split(".").pop() || "" : "";
-  const normalizedPath = hostPath.endsWith("/") ? `${hostPath}${name}` : `${hostPath}/${name}`;
+  const winMatch = trimmed.match(/^(?<date>\d{2}-\d{2}-\d{2})\s+(?<time>\d{2}:\d{2}[AP]M)\s+(?<sizeOrDir><DIR>|\d+)\s+(?<name>.+)$/i);
+  if (winMatch?.groups?.name) {
+    const name = winMatch.groups.name.trim();
+    if (!name || name === "." || name === "..") return null;
+    const [month, day, year] = winMatch.groups.date.split("-").map((part) => Number(part));
+    const asDate = new Date(`${year + 2000}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")} ${winMatch.groups.time}`);
+    const isDirectory = winMatch.groups.sizeOrDir.toUpperCase() === "<DIR>";
+    const extension = name.includes(".") ? name.split(".").pop() || "" : "";
+    const normalizedPath = hostPath.endsWith("/") ? `${hostPath}${name}` : `${hostPath}/${name}`;
+
+    return {
+      name,
+      extension,
+      size: isDirectory ? null : Number(winMatch.groups.sizeOrDir),
+      modifiedAt: Number.isNaN(asDate.getTime()) ? null : asDate.toISOString(),
+      fullPath: normalizedPath,
+      directory: hostPath,
+      isDirectory,
+      permissions: null,
+      type: isDirectory ? "directory" : "file",
+      status: "ok",
+      raw: line,
+    };
+  }
+
+  const fallbackName = trimmed.split(/\s+/).pop() || trimmed;
+  if (!fallbackName || fallbackName === "." || fallbackName === "..") return null;
+  const fallbackPath = hostPath.endsWith("/") ? `${hostPath}${fallbackName}` : `${hostPath}/${fallbackName}`;
 
   return {
-    name,
-    extension,
-    size: Number.isFinite(size) ? size : null,
-    modifiedAt,
-    fullPath: normalizedPath,
+    name: fallbackName,
+    extension: fallbackName.includes(".") ? fallbackName.split(".").pop() || "" : "",
+    size: null,
+    modifiedAt: null,
+    fullPath: fallbackPath,
     directory: hostPath,
-    isDirectory,
-    permissions,
-    type: isDirectory ? "directory" : "file",
+    isDirectory: false,
+    permissions: null,
+    type: "file",
     status: "ok",
     raw: line,
   };
@@ -237,6 +284,7 @@ serve(async (req) => {
 
     const conn = await withTimeout(Deno.connect({ hostname: host, port }), CONTROL_TIMEOUT_MS, "TIMEOUT");
     const files: FtpListFile[] = [];
+    const droppedEntries: DroppedEntry[] = [];
 
     try {
       const banner = await readResponse(conn);
@@ -307,18 +355,21 @@ serve(async (req) => {
       await sendCommand(conn, "QUIT");
 
       const listing = chunks.join("");
-      const lines = listing.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      const rawEntries = listing.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
 
-      for (const line of lines) {
-        const parsed = parseUnixListLine(line, remotePath);
-        if (!parsed) continue;
-
-        if (!source.filename_pattern || source.filename_pattern === "*") {
-          files.push(parsed);
-        } else {
-          const regex = new RegExp(String(source.filename_pattern).replace(/\*/g, ".*"));
-          if (regex.test(parsed.name)) files.push(parsed);
+      for (const line of rawEntries) {
+        const parsed = parseListLine(line, remotePath);
+        if (!parsed) {
+          droppedEntries.push({ reason: "unparseable_or_empty_entry", raw: line });
+          continue;
         }
+
+        if (parsed.name === "." || parsed.name === "..") {
+          droppedEntries.push({ reason: "dot_directory_entry", raw: line });
+          continue;
+        }
+
+        files.push(parsed);
       }
 
       await supabase.from("data_sources").update({
@@ -341,6 +392,12 @@ serve(async (req) => {
         mode: "list",
         testOnly: false,
         connectionStatus: "connected",
+        configuredPath: remotePath,
+        sourceId,
+        rawFileCount: rawEntries.length,
+        normalizedFileCount: files.length,
+        droppedEntriesCount: droppedEntries.length,
+        droppedEntriesPreview: droppedEntries.slice(0, 10),
         files,
         fileCount: files.length,
         emptyDirectory: files.length === 0,
