@@ -27,7 +27,18 @@ export default function LoginPage() {
     } else {
       toast.error("Sign in failed. Check your credentials and try again.");
       if (import.meta.env.DEV && result.errorMessage) {
-        toast.message(`Auth error: ${result.errorMessage}`);
+        const normalized = result.errorMessage.toLowerCase();
+        const diagnostic = normalized.includes("invalid login credentials")
+          ? "invalid login credentials"
+          : normalized.includes("email not confirmed")
+          ? "email not confirmed"
+          : normalized.includes("session")
+          ? "auth session missing"
+          : normalized.includes("network") || normalized.includes("fetch")
+          ? "wrong project/env or network issue"
+          : result.errorMessage;
+
+        toast.message(`Auth diagnostic: ${diagnostic}`);
       }
     }
   };

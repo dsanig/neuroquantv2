@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
-import { supabase } from '@/integrations/supabase/client';
+import { getSupabaseDiagnostics, supabase } from '@/integrations/supabase/client';
 
 interface AuthContextType {
   user: SupabaseUser | null;
@@ -50,16 +50,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) {
       if (import.meta.env.DEV) {
         console.error('Sign-in failed.', {
-          message: error.message,
-          status: error.status,
-          code: error.code,
-          name: error.name,
+          authError: {
+            message: error.message,
+            status: error.status,
+            code: error.code,
+            name: error.name,
+          },
+          attemptedEmail: email,
+          env: getSupabaseDiagnostics(),
         });
       } else {
         console.error('Sign-in failed.');
       }
 
       return { success: false, errorMessage: error.message };
+    }
+
+    if (!data.session && import.meta.env.DEV) {
+      console.warn('Sign-in succeeded but no session returned.', {
+        attemptedEmail: email,
+        userId: data.user?.id ?? null,
+        env: getSupabaseDiagnostics(),
+      });
     }
 
     setUser(data.user ?? null);

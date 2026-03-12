@@ -5,6 +5,17 @@ import type { Database } from './types';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
+export function getSupabaseDiagnostics() {
+  const projectRef = SUPABASE_URL?.match(/https:\/\/([^.]+)\.supabase\.co/i)?.[1] ?? null;
+
+  return {
+    supabaseUrl: SUPABASE_URL,
+    projectRef,
+    hasPublishableKey: Boolean(SUPABASE_PUBLISHABLE_KEY),
+    publishableKeyPrefix: SUPABASE_PUBLISHABLE_KEY?.slice(0, 12) ?? null,
+  };
+}
+
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
