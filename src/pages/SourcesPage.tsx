@@ -1,5 +1,15 @@
 import { useMemo, useState } from "react";
-import { useDataSources, useUpsertDataSource, useToggleSource, useTestFtpConnection, useFtpFetch, useTestPgpDecryption, FtpBrowseInvokeError, type FtpBrowserFile, type FtpBrowseResponse } from "@/hooks/use-pipeline";
+import {
+  useDataSources,
+  useUpsertDataSource,
+  useToggleSource,
+  useTestFtpConnection,
+  useFtpFetch,
+  useTestPgpDecryption,
+  FtpBrowseInvokeError,
+  type FtpBrowserFile,
+  type FtpBrowseResponse,
+} from "@/hooks/use-pipeline";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,8 +18,28 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Plus, TestTube, Power, PowerOff, Loader2, RefreshCw, FolderSearch } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { toYYYYMMDDFromIsoDate } from "@/lib/filename-date";
+import { formatPollingSchedule, parsePollingSchedule, serializePollingSchedule } from "@/lib/polling-schedule";
 
-type SortField = "name" | "sizeBytes" | "modifiedAt";
+type SortField = "name" | "sizeBytes" | "filenameDate";
+type DateFilterMode = "all" | "today" | "yesterday" | "customDate" | "customRange";
+
+type ScheduleEditorState = {
+  enabled: boolean;
+  time: string;
+  daysOfWeek: number[];
+  timezone: string;
+};
+
+const WEEKDAY_OPTIONS: Array<{ value: number; label: string }> = [
+  { value: 1, label: "Monday" },
+  { value: 2, label: "Tuesday" },
+  { value: 3, label: "Wednesday" },
+  { value: 4, label: "Thursday" },
+  { value: 5, label: "Friday" },
+  { value: 6, label: "Saturday" },
+  { value: 7, label: "Sunday" },
+];
 
 function formatBytes(sizeBytes: number | null | undefined) {
   if (typeof sizeBytes !== "number" || !Number.isFinite(sizeBytes) || sizeBytes < 0) return "-";
@@ -19,30 +49,48 @@ function formatBytes(sizeBytes: number | null | undefined) {
   return `${(sizeBytes / 1024 ** 3).toFixed(2)} GB`;
 }
 
-function formatModifiedDate(value: string | null | undefined) {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? "-" : parsed.toLocaleString();
-}
-
 function maskHost(host: string) {
   if (!host) return "-";
   if (host.length <= 4) return "****";
   return `${host.slice(0, 2)}***${host.slice(-2)}`;
 }
 
+function toDateInputValue(offsetDays = 0): string {
+  const now = new Date();
+  now.setUTCDate(now.getUTCDate() + offsetDays);
+  return now.toISOString().slice(0, 10);
+}
+
+function compareNullableStrings(a: string | null | undefined, b: string | null | undefined): number {
+  return (a || "").localeCompare(b || "");
+}
+
+function normalizeScheduleEditorState(raw: string | null | undefined): ScheduleEditorState {
+  const schedule = parsePollingSchedule(raw);
+  return {
+    enabled: schedule.enabled,
+    time: schedule.time,
+    daysOfWeek: schedule.daysOfWeek,
+    timezone: schedule.timezone,
+  };
+}
+
 export default function SourcesPage() {
   const [editing, setEditing] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<Record<string, unknown>>({});
+  const [scheduleEditor, setScheduleEditor] = useState<ScheduleEditorState>(normalizeScheduleEditorState("0 6 * * *"));
 
   const [ftpDialogOpen, setFtpDialogOpen] = useState(false);
   const [selectedSourceId, setSelectedSourceId] = useState<string>("");
-  const [searchTerm, setSearchTerm] = useState("");
+  const [nameFilter, setNameFilter] = useState("");
+  const [dateFilterMode, setDateFilterMode] = useState<DateFilterMode>("all");
+  const [customDate, setCustomDate] = useState("");
+  const [customStartDate, setCustomStartDate] = useState("");
+  const [customEndDate, setCustomEndDate] = useState("");
   const [extensionFilter, setExtensionFilter] = useState("all");
-  const [dateFilter, setDateFilter] = useState<"all" | "today" | "last7">("all");
-  const [sortField, setSortField] = useState<SortField>("modifiedAt");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [sortField, setSortField] = useState<SortField>("name");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
   const [connectionState, setConnectionState] = useState<"idle" | "connected" | "error">("idle");
   const [connectionMessage, setConnectionMessage] = useState<string>("No FTP test run yet.");
@@ -66,25 +114,41 @@ export default function SourcesPage() {
     [ftpSources, selectedSourceId],
   );
 
+  const availableExtensions = useMemo(
+    () => Array.from(new Set(files.map((f) => f.extension).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b)),
+    [files],
+  );
+
   const filteredFiles = useMemo(() => {
-    const now = new Date();
+    const today = toDateInputValue(0);
+    const yesterday = toDateInputValue(-1);
 
     const rows = files.filter((f) => {
-      const searchOk = !searchTerm || f.name.toLowerCase().includes(searchTerm.toLowerCase());
-      const extOk = extensionFilter === "all" || (f.extension ?? "").toLowerCase() === extensionFilter.toLowerCase();
+      const matchesName = !nameFilter || f.name.toLowerCase().includes(nameFilter.trim().toLowerCase());
+      if (!matchesName) return false;
 
-      let dateOk = true;
-      if (dateFilter !== "all" && f.modifiedAt) {
-        const mod = new Date(f.modifiedAt);
-        if (dateFilter === "today") {
-          dateOk = mod.toDateString() === now.toDateString();
-        } else if (dateFilter === "last7") {
-          const diff = now.getTime() - mod.getTime();
-          dateOk = diff >= 0 && diff <= 7 * 24 * 60 * 60 * 1000;
-        }
+      const matchesExtension = extensionFilter === "all" || (f.extension ?? "").toLowerCase() === extensionFilter.toLowerCase();
+      if (!matchesExtension) return false;
+
+      const fileDate = f.extractedFilenameDate;
+      if (dateFilterMode === "all") return true;
+      if (!fileDate) return false;
+
+      if (dateFilterMode === "today") return fileDate === today;
+      if (dateFilterMode === "yesterday") return fileDate === yesterday;
+
+      if (dateFilterMode === "customDate") {
+        const target = customDate || today;
+        return fileDate === target;
       }
 
-      return searchOk && extOk && dateOk;
+      if (dateFilterMode === "customRange") {
+        const start = customStartDate || "0000-01-01";
+        const end = customEndDate || "9999-12-31";
+        return fileDate >= start && fileDate <= end;
+      }
+
+      return true;
     });
 
     rows.sort((a, b) => {
@@ -94,18 +158,24 @@ export default function SourcesPage() {
       } else if (sortField === "sizeBytes") {
         value = (a.sizeBytes ?? -1) - (b.sizeBytes ?? -1);
       } else {
-        value = new Date(a.modifiedAt ?? 0).getTime() - new Date(b.modifiedAt ?? 0).getTime();
+        value = compareNullableStrings(a.extractedFilenameDate, b.extractedFilenameDate);
       }
       return sortDirection === "asc" ? value : value * -1;
     });
 
     return rows;
-  }, [files, searchTerm, extensionFilter, dateFilter, sortField, sortDirection]);
+  }, [files, nameFilter, extensionFilter, dateFilterMode, customDate, customStartDate, customEndDate, sortField, sortDirection]);
 
-  const availableExtensions = useMemo(
-    () => Array.from(new Set(files.map((f) => f.extension).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b)),
-    [files],
-  );
+  const resetFilters = () => {
+    setNameFilter("");
+    setDateFilterMode("all");
+    setCustomDate("");
+    setCustomStartDate("");
+    setCustomEndDate("");
+    setExtensionFilter("all");
+    setSortField("name");
+    setSortDirection("asc");
+  };
 
   const runFtpTest = (testOnly: boolean) => {
     if (!selectedSourceId) {
@@ -134,7 +204,7 @@ export default function SourcesPage() {
           setConnectionMessage(
             testOnly
               ? `Connection successful (${res.latencyMs ?? 0} ms).`
-              : `Connection successful. Retrieved ${res.normalizedFileCount ?? res.fileCount ?? 0} files.`,
+              : `Connection successful. Retrieved ${res.normalizedFileCount ?? res.fileCount ?? 0} files from ${res.pathUsed || res.configuredPath || "configured path"}.`,
           );
 
           if (!testOnly) {
@@ -190,36 +260,50 @@ export default function SourcesPage() {
     const src = sources?.find((s) => s.id === id);
     if (src) {
       setForm({ ...src });
+      setScheduleEditor(normalizeScheduleEditorState(src.polling_schedule));
       setEditing(id);
       setCreating(false);
     }
   };
 
   const startCreate = () => {
+    const defaultSchedule = normalizeScheduleEditorState("0 6 * * *");
     setForm({
       name: "", type: "IBKR Activity Statement", protocol: "FTP",
       host: "", port: 21, username: "", password_ref: "",
-      remote_path: "/", filename_pattern: "*", polling_schedule: "0 6 * * *",
+      remote_path: "/", filename_pattern: "*", polling_schedule: serializePollingSchedule(defaultSchedule),
       active: true, encrypted: false, encryption_type: "PGP",
       pgp_key_ref: "", pgp_passphrase_ref: "", pgp_armored: true,
     });
+    setScheduleEditor(defaultSchedule);
     setEditing(null);
     setCreating(true);
   };
 
   const handleSave = () => {
-    if (isAuthLoading) {
+    if (isAuthLoading || !isAuthenticated) {
       toast.error("Your session is not ready or has expired. Please sign in again.");
       return;
     }
 
-    if (!isAuthenticated) {
-      toast.error("Your session is not ready or has expired. Please sign in again.");
-      return;
+    if (scheduleEditor.enabled) {
+      if (!scheduleEditor.time) {
+        toast.error("Polling time is required when polling is enabled.");
+        return;
+      }
+      if (!scheduleEditor.daysOfWeek.length) {
+        toast.error("Select at least one weekday when polling is enabled.");
+        return;
+      }
     }
 
-    const payload = { ...form };
+    const payload = {
+      ...form,
+      polling_schedule: serializePollingSchedule(scheduleEditor),
+    };
+
     if (editing) payload.id = editing;
+
     upsert.mutate(payload, {
       onSuccess: () => {
         setEditing(null);
@@ -301,7 +385,7 @@ export default function SourcesPage() {
                 <div className="flex justify-between"><span className="text-muted-foreground">Host</span><span className="font-mono">{s.host}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Port</span><span className="font-mono">{s.port}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Encrypted</span><span className="font-mono">{s.encrypted ? "PGP" : "No"}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Schedule</span><span className="font-mono">{s.polling_schedule}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Schedule</span><span className="font-mono">{formatPollingSchedule(s.polling_schedule)}</span></div>
                 {s.last_connected_at && <div className="flex justify-between"><span className="text-muted-foreground">Last Connected</span><span className="font-mono">{new Date(s.last_connected_at).toLocaleString()}</span></div>}
                 {s.last_error && <div className="text-destructive text-xs mt-1">{s.last_error}</div>}
               </div>
@@ -338,7 +422,52 @@ export default function SourcesPage() {
             <div><label className="config-label">Password / Secret Ref</label><Input type="password" value={(form.password_ref as string) || ""} onChange={(e) => setForm({ ...form, password_ref: e.target.value })} className="bg-secondary border-border" /></div>
             <div><label className="config-label">Remote Path</label><Input value={(form.remote_path as string) || "/"} onChange={(e) => setForm({ ...form, remote_path: e.target.value })} className="bg-secondary border-border" /></div>
             <div><label className="config-label">Filename Pattern</label><Input value={(form.filename_pattern as string) || "*"} onChange={(e) => setForm({ ...form, filename_pattern: e.target.value })} className="bg-secondary border-border" /></div>
-            <div><label className="config-label">Polling Schedule (cron)</label><Input value={(form.polling_schedule as string) || "0 6 * * *"} onChange={(e) => setForm({ ...form, polling_schedule: e.target.value })} className="bg-secondary border-border" /></div>
+
+            <div className="md:col-span-2 lg:col-span-3 border rounded-md border-border p-3">
+              <div className="text-sm font-semibold text-foreground mb-3">Polling schedule</div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="config-label">Enable polling</label>
+                  <select value={scheduleEditor.enabled ? "true" : "false"} onChange={(e) => setScheduleEditor((prev) => ({ ...prev, enabled: e.target.value === "true" }))} className="w-full bg-secondary border border-border text-foreground text-sm rounded-md px-3 py-2">
+                    <option value="true">Enabled</option>
+                    <option value="false">Disabled</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="config-label">Daily time</label>
+                  <Input type="time" value={scheduleEditor.time} onChange={(e) => setScheduleEditor((prev) => ({ ...prev, time: e.target.value }))} className="bg-secondary border-border" disabled={!scheduleEditor.enabled} />
+                </div>
+                <div>
+                  <label className="config-label">Timezone</label>
+                  <Input value={scheduleEditor.timezone} onChange={(e) => setScheduleEditor((prev) => ({ ...prev, timezone: e.target.value || "UTC" }))} className="bg-secondary border-border" placeholder="UTC" disabled={!scheduleEditor.enabled} />
+                </div>
+                <div className="text-xs text-muted-foreground flex items-end">{formatPollingSchedule(serializePollingSchedule(scheduleEditor))}</div>
+              </div>
+              <div className="mt-3">
+                <label className="config-label">Weekdays</label>
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2 mt-1">
+                  {WEEKDAY_OPTIONS.map((day) => (
+                    <label key={day.value} className="flex items-center gap-2 text-xs border border-border rounded-md px-2 py-1 bg-secondary">
+                      <input
+                        type="checkbox"
+                        checked={scheduleEditor.daysOfWeek.includes(day.value)}
+                        disabled={!scheduleEditor.enabled}
+                        onChange={(e) => {
+                          setScheduleEditor((prev) => {
+                            const nextDays = e.target.checked
+                              ? [...prev.daysOfWeek, day.value]
+                              : prev.daysOfWeek.filter((d) => d !== day.value);
+                            return { ...prev, daysOfWeek: Array.from(new Set(nextDays)).sort((a, b) => a - b) };
+                          });
+                        }}
+                      />
+                      <span>{day.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+
             <div className="flex items-end">
               <Button variant="outline" size="sm" className="text-xs" onClick={handleTestConnection} disabled={testFtp.isPending}>
                 {testFtp.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <TestTube className="h-3 w-3 mr-1.5" />}
@@ -444,33 +573,70 @@ export default function SourcesPage() {
             <span className="text-sm text-muted-foreground">{connectionMessage}</span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-            <Input placeholder="Search file name" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-            <select value={extensionFilter} onChange={(e) => setExtensionFilter(e.target.value)} className="w-full bg-secondary border border-border text-foreground text-sm rounded-md px-3 py-2">
-              <option value="all">All extensions</option>
-              {availableExtensions.map((ext) => <option key={ext} value={ext}>{ext}</option>)}
-            </select>
-            <select value={sortField} onChange={(e) => setSortField(e.target.value as SortField)} className="w-full bg-secondary border border-border text-foreground text-sm rounded-md px-3 py-2">
-              <option value="modifiedAt">Sort: Modified</option>
-              <option value="name">Sort: Name</option>
-              <option value="sizeBytes">Sort: Size</option>
-            </select>
-            <select value={sortDirection} onChange={(e) => setSortDirection(e.target.value as "asc" | "desc")} className="w-full bg-secondary border border-border text-foreground text-sm rounded-md px-3 py-2">
-              <option value="desc">Descending</option>
-              <option value="asc">Ascending</option>
-            </select>
-            <select value={dateFilter} onChange={(e) => setDateFilter(e.target.value as "all" | "today" | "last7")} className="w-full bg-secondary border border-border text-foreground text-sm rounded-md px-3 py-2">
-              <option value="all">All dates</option>
-              <option value="today">Today</option>
-              <option value="last7">Last 7 days</option>
-            </select>
+          <div className="border border-border rounded-md p-3 space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="md:col-span-2">
+                <label className="config-label">Filename contains</label>
+                <div className="flex gap-2">
+                  <Input placeholder="GLOBAL_DAILY" value={nameFilter} onChange={(e) => setNameFilter(e.target.value)} />
+                  <Button variant="outline" size="sm" onClick={() => setNameFilter("")}>Clear</Button>
+                </div>
+              </div>
+              <div>
+                <label className="config-label">Date filter</label>
+                <select value={dateFilterMode} onChange={(e) => setDateFilterMode(e.target.value as DateFilterMode)} className="w-full bg-secondary border border-border text-foreground text-sm rounded-md px-3 py-2">
+                  <option value="all">All dates</option>
+                  <option value="today">Today</option>
+                  <option value="yesterday">Yesterday</option>
+                  <option value="customDate">Custom date</option>
+                  <option value="customRange">Custom date range</option>
+                </select>
+              </div>
+            </div>
+
+            {dateFilterMode === "customDate" && (
+              <div>
+                <label className="config-label">Custom date</label>
+                <Input type="date" value={customDate} onChange={(e) => setCustomDate(e.target.value)} className="max-w-xs" />
+              </div>
+            )}
+
+            {dateFilterMode === "customRange" && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="config-label">Start date</label>
+                  <Input type="date" value={customStartDate} onChange={(e) => setCustomStartDate(e.target.value)} />
+                </div>
+                <div>
+                  <label className="config-label">End date</label>
+                  <Input type="date" value={customEndDate} onChange={(e) => setCustomEndDate(e.target.value)} />
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <select value={sortField} onChange={(e) => setSortField(e.target.value as SortField)} className="w-full bg-secondary border border-border text-foreground text-sm rounded-md px-3 py-2">
+                <option value="name">Sort: Filename</option>
+                <option value="filenameDate">Sort: Filename date</option>
+                <option value="sizeBytes">Sort: Size</option>
+              </select>
+              <select value={sortDirection} onChange={(e) => setSortDirection(e.target.value as "asc" | "desc")} className="w-full bg-secondary border border-border text-foreground text-sm rounded-md px-3 py-2">
+                <option value="asc">Ascending</option>
+                <option value="desc">Descending</option>
+              </select>
+              <select value={extensionFilter} onChange={(e) => setExtensionFilter(e.target.value)} className="w-full bg-secondary border border-border text-foreground text-sm rounded-md px-3 py-2">
+                <option value="all">All extensions</option>
+                {availableExtensions.map((ext) => <option key={ext} value={ext}>{ext}</option>)}
+              </select>
+              <Button variant="outline" size="sm" onClick={resetFilters}>Reset filters</Button>
+            </div>
           </div>
 
           <div className="flex justify-between text-xs text-muted-foreground">
             <span>
-              Displayed: {filteredFiles.length}
+              Displayed {filteredFiles.length} of {files.length} files
               {connectionState === "connected"
-                ? ` / Normalized: ${lastListResponse?.normalizedFileCount ?? files.length} / Raw: ${lastListResponse?.rawFileCount ?? files.length}`
+                ? ` / Raw: ${lastListResponse?.rawFileCount ?? files.length} / Normalized: ${lastListResponse?.normalizedFileCount ?? files.length}`
                 : ""}
             </span>
             <span>Last refresh: {lastRefreshAt ? new Date(lastRefreshAt).toLocaleString() : "-"}</span>
@@ -481,6 +647,7 @@ export default function SourcesPage() {
               <thead className="bg-secondary/50 border-b border-border">
                 <tr>
                   <th className="text-left px-3 py-2">Name</th>
+                  <th className="text-left px-3 py-2">Filename Date (YYYY-MM-DD)</th>
                   <th className="text-left px-3 py-2">Extension</th>
                   <th className="text-left px-3 py-2">Size</th>
                   <th className="text-left px-3 py-2">Modified</th>
@@ -491,17 +658,18 @@ export default function SourcesPage() {
               <tbody>
                 {filteredFiles.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">
-                      {connectionState === "connected" ? "No files found in this folder." : "Run a test/list command to view available files."}
+                    <td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">
+                      {connectionState === "connected" ? "No files match the selected filters." : "Run a test/list command to view available files."}
                     </td>
                   </tr>
                 ) : (
                   filteredFiles.map((file) => (
                     <tr key={`${file.fullPath}-${file.name}`} className="border-b border-border/60">
                       <td className="px-3 py-2 font-mono">{file.name}</td>
+                      <td className="px-3 py-2">{file.extractedFilenameDate || "-"}</td>
                       <td className="px-3 py-2">{file.extension ?? "-"}</td>
                       <td className="px-3 py-2">{formatBytes(file.sizeBytes)}</td>
-                      <td className="px-3 py-2">{formatModifiedDate(file.modifiedAt)}</td>
+                      <td className="px-3 py-2">{file.modifiedAt || "-"}</td>
                       <td className="px-3 py-2 font-mono">{file.path ?? file.fullPath ?? "-"}</td>
                       <td className="px-3 py-2">{file.status || file.type || (file.isDirectory ? "directory" : "file")}</td>
                     </tr>
@@ -514,14 +682,23 @@ export default function SourcesPage() {
           <details>
             <summary className="text-xs text-muted-foreground cursor-pointer">Raw JSON debug view</summary>
             <pre className="mt-2 p-3 rounded-md bg-secondary text-xs overflow-x-auto border border-border">{debugJson || JSON.stringify({
-              configuredPath: selectedSource?.remote_path || null,
               sourceId: selectedSourceId || null,
+              pathUsed: lastListResponse?.pathUsed ?? lastListResponse?.configuredPath ?? selectedSource?.remote_path ?? null,
               rawFileCount: lastListResponse?.rawFileCount ?? files.length,
               normalizedFileCount: lastListResponse?.normalizedFileCount ?? files.length,
               displayedFileCount: filteredFiles.length,
               droppedEntriesCount: lastListResponse?.droppedEntriesCount ?? 0,
               droppedEntriesPreview: lastListResponse?.droppedEntriesPreview ?? [],
-              activeFilters: { searchTerm, extensionFilter, dateFilter, sortField, sortDirection },
+              activeFilters: {
+                filenameContains: nameFilter,
+                dateFilterMode,
+                customDate: customDate ? toYYYYMMDDFromIsoDate(customDate) : null,
+                customStartDate: customStartDate ? toYYYYMMDDFromIsoDate(customStartDate) : null,
+                customEndDate: customEndDate ? toYYYYMMDDFromIsoDate(customEndDate) : null,
+                extensionFilter,
+                sortField,
+                sortDirection,
+              },
             }, null, 2)}</pre>
           </details>
         </DialogContent>
