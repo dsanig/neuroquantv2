@@ -2,6 +2,35 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
+function isPermissionError(message?: string) {
+  const normalized = (message || '').toLowerCase();
+  return normalized.includes('row-level security') || normalized.includes('permission denied') || normalized.includes('not allowed');
+}
+
+async function requireAuthenticatedSession() {
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) {
+    console.error('Failed to get Supabase session before write operation.', sessionError);
+    throw new Error('SESSION_NOT_READY');
+  }
+
+  if (!sessionData.session) {
+    throw new Error('SESSION_NOT_READY');
+  }
+
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError) {
+    console.error('Failed to get Supabase user before write operation.', userError);
+    throw new Error('SESSION_NOT_READY');
+  }
+
+  if (!userData.user) {
+    throw new Error('SESSION_NOT_READY');
+  }
+
+  return userData.user;
+}
+
 // ===== Data Sources =====
 export function useDataSources() {
   return useQuery({
@@ -18,6 +47,8 @@ export function useUpsertDataSource() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (source: Record<string, unknown>) => {
+      await requireAuthenticatedSession();
+
       const { id, ...rest } = source;
       const { data, error } = id
         ? await supabase.from('data_sources').update(rest as any).eq('id', id as string).select().single()
@@ -29,7 +60,20 @@ export function useUpsertDataSource() {
       qc.invalidateQueries({ queryKey: ['data-sources'] });
       toast.success('Source saved');
     },
-    onError: (e) => toast.error(`Save failed: ${e.message}`),
+    onError: (e: Error) => {
+      if (e.message === 'SESSION_NOT_READY') {
+        toast.error('Your session is not ready or has expired. Please sign in again.');
+        return;
+      }
+
+      if (isPermissionError(e.message)) {
+        toast.error('You do not have permission to save this source configuration.');
+        return;
+      }
+
+      console.error('Unexpected source save error.', e);
+      toast.error('Save failed. Please try again.');
+    },
   });
 }
 
