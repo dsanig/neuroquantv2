@@ -1,10 +1,10 @@
 import {
   LayoutDashboard, Layers, ArrowLeftRight, Target, ShieldAlert, 
   Landmark, TrendingUp, DollarSign, Download, Database, 
-  Settings2, MapPin, FileText, ScrollText, Settings, UserCog, LogOut, Brain
+  Settings2, MapPin, FileText, ScrollText, Settings, UserCog, LogOut, Brain,
+  Crosshair, FlaskConical, ShieldCheck, BookOpen, Globe
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
-import { useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
@@ -21,6 +21,8 @@ const mainNav = [
   { title: "Margin", url: "/margin", icon: Landmark },
   { title: "Performance", url: "/performance", icon: TrendingUp },
   { title: "Income", url: "/income", icon: DollarSign },
+  { title: "Campaigns", url: "/campaigns", icon: Crosshair },
+  { title: "Research", url: "/research", icon: FlaskConical },
 ];
 
 const ingestionNav = [
@@ -28,9 +30,12 @@ const ingestionNav = [
   { title: "Data Connections", url: "/sources", icon: Database },
   { title: "Parser Config", url: "/parser-config", icon: Settings2 },
   { title: "Mapping Rules", url: "/mapping-rules", icon: MapPin },
+  { title: "External Data", url: "/external-data", icon: Globe },
 ];
 
 const adminNav = [
+  { title: "Data Quality", url: "/data-quality", icon: ShieldCheck },
+  { title: "Analytics Catalog", url: "/analytics-catalog", icon: BookOpen },
   { title: "Reports", url: "/reports", icon: FileText },
   { title: "Audit Log", url: "/audit-log", icon: ScrollText },
   { title: "Settings", url: "/settings", icon: Settings },
@@ -40,7 +45,6 @@ const adminNav = [
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
-  const location = useLocation();
   const { logout, user } = useAuth();
 
   const renderItems = (items: typeof mainNav) => (
@@ -69,9 +73,7 @@ export function AppSidebar() {
         <div className="flex items-center gap-2.5">
           <Brain className="h-5 w-5 text-primary shrink-0" />
           {!collapsed && (
-            <span className="text-base font-semibold text-foreground tracking-tight">
-              NeuroQuant
-            </span>
+            <span className="text-base font-semibold text-foreground tracking-tight">NeuroQuant</span>
           )}
         </div>
       </SidebarHeader>

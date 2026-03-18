@@ -47,107 +47,6 @@ export type Database = {
         }
         Relationships: []
       }
-      database_connections: {
-        Row: {
-          active: boolean
-          created_at: string
-          database_name: string
-          enabled: boolean
-          host: string
-          id: string
-          last_connected_at: string | null
-          last_error: string | null
-          last_status: string
-          name: string
-          password_secret: string
-          port: number
-          schema_name: string | null
-          ssl_mode: string
-          updated_at: string
-          username: string
-        }
-        Insert: {
-          active?: boolean
-          created_at?: string
-          database_name: string
-          enabled?: boolean
-          host: string
-          id?: string
-          last_connected_at?: string | null
-          last_error?: string | null
-          last_status?: string
-          name: string
-          password_secret: string
-          port?: number
-          schema_name?: string | null
-          ssl_mode?: string
-          updated_at?: string
-          username: string
-        }
-        Update: {
-          active?: boolean
-          created_at?: string
-          database_name?: string
-          enabled?: boolean
-          host?: string
-          id?: string
-          last_connected_at?: string | null
-          last_error?: string | null
-          last_status?: string
-          name?: string
-          password_secret?: string
-          port?: number
-          schema_name?: string | null
-          ssl_mode?: string
-          updated_at?: string
-          username?: string
-        }
-        Relationships: []
-      }
-      dataset_mappings: {
-        Row: {
-          active: boolean
-          connection_id: string
-          created_at: string
-          dataset_key: string
-          id: string
-          notes: string | null
-          schema_name: string
-          table_name: string
-          updated_at: string
-        }
-        Insert: {
-          active?: boolean
-          connection_id: string
-          created_at?: string
-          dataset_key: string
-          id?: string
-          notes?: string | null
-          schema_name?: string
-          table_name: string
-          updated_at?: string
-        }
-        Update: {
-          active?: boolean
-          connection_id?: string
-          created_at?: string
-          dataset_key?: string
-          id?: string
-          notes?: string | null
-          schema_name?: string
-          table_name?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "dataset_mappings_connection_id_fkey"
-            columns: ["connection_id"]
-            isOneToOne: false
-            referencedRelation: "database_connections"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       data_sources: {
         Row: {
           active: boolean
@@ -222,6 +121,113 @@ export type Database = {
           username?: string
         }
         Relationships: []
+      }
+      database_connections: {
+        Row: {
+          active: boolean
+          created_at: string
+          database_name: string
+          enabled: boolean
+          host: string
+          id: string
+          last_connected_at: string | null
+          last_error: string | null
+          last_status: string
+          name: string
+          password_secret: string | null
+          port: number
+          schema_name: string | null
+          ssl_mode: string
+          updated_at: string
+          username: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          database_name?: string
+          enabled?: boolean
+          host: string
+          id?: string
+          last_connected_at?: string | null
+          last_error?: string | null
+          last_status?: string
+          name: string
+          password_secret?: string | null
+          port?: number
+          schema_name?: string | null
+          ssl_mode?: string
+          updated_at?: string
+          username?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          database_name?: string
+          enabled?: boolean
+          host?: string
+          id?: string
+          last_connected_at?: string | null
+          last_error?: string | null
+          last_status?: string
+          name?: string
+          password_secret?: string | null
+          port?: number
+          schema_name?: string | null
+          ssl_mode?: string
+          updated_at?: string
+          username?: string
+        }
+        Relationships: []
+      }
+      dataset_mappings: {
+        Row: {
+          active: boolean
+          column_mappings: Json | null
+          connection_id: string
+          created_at: string
+          dataset_key: string
+          id: string
+          notes: string | null
+          schema_name: string
+          table_name: string
+          transform_rules: Json | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          column_mappings?: Json | null
+          connection_id: string
+          created_at?: string
+          dataset_key: string
+          id?: string
+          notes?: string | null
+          schema_name?: string
+          table_name: string
+          transform_rules?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          column_mappings?: Json | null
+          connection_id?: string
+          created_at?: string
+          dataset_key?: string
+          id?: string
+          notes?: string | null
+          schema_name?: string
+          table_name?: string
+          transform_rules?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dataset_mappings_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "database_connections"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       import_batches: {
         Row: {

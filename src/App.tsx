@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -22,6 +22,11 @@ import ReportsPage from "@/pages/ReportsPage";
 import AuditLogPage from "@/pages/AuditLogPage";
 import SettingsPage from "@/pages/SettingsPage";
 import AdminPage from "@/pages/AdminPage";
+import CampaignsPage from "@/pages/CampaignsPage";
+import ResearchPage from "@/pages/ResearchPage";
+import DataQualityPage from "@/pages/DataQualityPage";
+import AnalyticsCatalogPage from "@/pages/AnalyticsCatalogPage";
+import ExternalDataPage from "@/pages/ExternalDataPage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -44,10 +49,15 @@ const App = () => (
               <Route path="/margin" element={<MarginPage />} />
               <Route path="/performance" element={<PerformancePage />} />
               <Route path="/income" element={<IncomePage />} />
+              <Route path="/campaigns" element={<CampaignsPage />} />
+              <Route path="/research" element={<ResearchPage />} />
               <Route path="/imports" element={<ImportsPage />} />
               <Route path="/sources" element={<SourcesPage />} />
               <Route path="/parser-config" element={<ParserConfigPage />} />
               <Route path="/mapping-rules" element={<MappingRulesPage />} />
+              <Route path="/external-data" element={<ExternalDataPage />} />
+              <Route path="/data-quality" element={<DataQualityPage />} />
+              <Route path="/analytics-catalog" element={<AnalyticsCatalogPage />} />
               <Route path="/reports" element={<ReportsPage />} />
               <Route path="/audit-log" element={<AuditLogPage />} />
               <Route path="/settings" element={<SettingsPage />} />
