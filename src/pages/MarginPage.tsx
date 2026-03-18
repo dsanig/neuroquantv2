@@ -1,69 +1,74 @@
 import { MetricCard } from "@/components/MetricCard";
-import { strategies } from "@/lib/mock-data";
+import { DataStatusBanner } from "@/components/DataStatusBanner";
+import { DataTable } from "@/components/DataTable";
+import { useExternalQuery } from "@/hooks/use-analytics";
+
+function num(v: unknown): number { const n = Number(v); return isNaN(n) ? 0 : n; }
+function fmtC(v: unknown): string { const n = num(v); return n >= 0 ? `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `-$${Math.abs(n).toLocaleString(undefined, { maximumFractionDigits: 0 })}`; }
 
 export default function MarginPage() {
+  // Try to read margin data from open_position_summary or post
+  const margin = useExternalQuery(['margin-summary'], `
+    SELECT * FROM open_position_summary LIMIT 50
+  `);
+
+  // Also try concentration for assignment/collateral analysis
+  const exposure = useExternalQuery(['margin-exposure'], `
+    SELECT symbol, sum(abs(notional_value)) as notional, sum(margin_requirement) as margin_req
+    FROM open_positions_data
+    WHERE asset_class IN ('OPT','Option')
+    GROUP BY symbol
+    ORDER BY sum(abs(notional_value)) DESC
+    LIMIT 30
+  `);
+
+  const marginRows = (margin.data || []) as Record<string, unknown>[];
+  const expRows = (exposure.data || []) as Record<string, unknown>[];
+  const isLoading = margin.isLoading;
+
+  if (isLoading || (margin.isError && exposure.isError)) {
+    return (
+      <div className="page-container">
+        <div className="section-header"><h1 className="section-title">Margin</h1></div>
+        <DataStatusBanner isLoading={isLoading} isError={margin.isError} error={margin.error as Error} isEmpty={false} moduleName="Margin" requiredTables={['open_position_summary', 'open_positions_data']} />
+      </div>
+    );
+  }
+
+  const autoCols = (rows: Record<string, unknown>[]) => {
+    if (!rows.length) return [];
+    return Object.keys(rows[0]).map(k => ({ key: k, label: k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) }));
+  };
+
   return (
     <div className="page-container">
-      <div className="section-header">
-        <h1 className="section-title">Margin</h1>
-      </div>
+      <div className="section-header"><h1 className="section-title">Margin</h1></div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <MetricCard label="Initial Margin" value="$312,400" />
-        <MetricCard label="Maintenance Margin" value="$248,200" />
-        <MetricCard label="Excess Liquidity" value="$730,180" change="70.0% NLV" changeType="positive" />
-        <MetricCard label="Broker Requirement" value="$285,600" />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {marginRows.length > 0 && (
         <div className="metric-card">
-          <div className="metric-label mb-3">Margin by Strategy</div>
-          <table className="data-table">
-            <thead>
-              <tr><th>Strategy</th><th>Margin Used</th><th>% of Total</th><th>Max Risk</th></tr>
-            </thead>
-            <tbody>
-              {[
-                { name: 'SPY Iron Condor', margin: 85000, pct: 27.2, maxRisk: -15000 },
-                { name: 'AAPL Covered Call', margin: 89250, pct: 28.6, maxRisk: -89250 },
-                { name: 'QQQ Put Spread', margin: 72000, pct: 23.1, maxRisk: -16000 },
-                { name: 'TSLA Strangle', margin: 66150, pct: 21.2, maxRisk: -25000 },
-              ].map(m => (
-                <tr key={m.name}>
-                  <td className="font-sans font-medium text-foreground">{m.name}</td>
-                  <td>${m.margin.toLocaleString()}</td>
-                  <td>{m.pct}%</td>
-                  <td className="text-destructive">${m.maxRisk.toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="metric-label mb-3">Position Summary</div>
+          <DataTable columns={autoCols(marginRows)} data={marginRows} stickyHeader />
         </div>
+      )}
 
+      {expRows.length > 0 && (
         <div className="metric-card">
-          <div className="metric-label mb-3">Margin by Underlying</div>
-          <table className="data-table">
-            <thead>
-              <tr><th>Underlying</th><th>Margin</th><th>Notional</th><th>Margin/Notional</th></tr>
-            </thead>
-            <tbody>
-              {[
-                { name: 'SPY', margin: 85000, notional: 1960000, ratio: 4.3 },
-                { name: 'AAPL', margin: 89250, notional: 183650, ratio: 48.6 },
-                { name: 'QQQ', margin: 72000, notional: 624000, ratio: 11.5 },
-                { name: 'TSLA', margin: 66150, notional: 141000, ratio: 46.9 },
-              ].map(m => (
-                <tr key={m.name}>
-                  <td className="font-sans font-medium text-foreground">{m.name}</td>
-                  <td>${m.margin.toLocaleString()}</td>
-                  <td>${(m.notional / 1000).toFixed(0)}K</td>
-                  <td>{m.ratio}%</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="metric-label mb-3">Options Margin by Symbol</div>
+          <DataTable
+            columns={[
+              { key: 'symbol', label: 'Symbol', className: 'font-sans text-foreground font-medium' },
+              { key: 'notional', label: 'Notional', align: 'right' as const, format: (v: unknown) => fmtC(v) },
+              { key: 'margin_req', label: 'Margin Req', align: 'right' as const, format: (v: unknown) => fmtC(v) },
+            ]}
+            data={expRows}
+            stickyHeader
+          />
         </div>
-      </div>
+      )}
+
+      {!marginRows.length && !expRows.length && (
+        <DataStatusBanner isLoading={false} isError={false} isEmpty moduleName="Margin" />
+      )}
     </div>
   );
 }

@@ -1,48 +1,72 @@
-import { strategies, positions } from "@/lib/mock-data";
+import { DataStatusBanner } from "@/components/DataStatusBanner";
+import { DataTable } from "@/components/DataTable";
+import { ExportButton } from "@/components/ExportButton";
 import { MetricCard } from "@/components/MetricCard";
+import { useExternalQuery, useTradeSummaryBySymbol, useTradeSummaryByAssetClass } from "@/hooks/use-analytics";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function StrategiesPage() {
+  const bySymbol = useTradeSummaryBySymbol();
+  const byAsset = useTradeSummaryByAssetClass();
+  const optDist = useExternalQuery(['strat-opt-dist'], `SELECT * FROM options_distribution_by_expiration ORDER BY 1`);
+
+  const symRows = (bySymbol.data || []) as Record<string, unknown>[];
+  const assetRows = (byAsset.data || []) as Record<string, unknown>[];
+
+  const isLoading = bySymbol.isLoading;
+  const isError = bySymbol.isError && byAsset.isError;
+
+  if (isLoading || (isError && !symRows.length)) {
+    return (
+      <div className="page-container">
+        <div className="section-header"><h1 className="section-title">Strategies</h1></div>
+        <DataStatusBanner isLoading={isLoading} isError={isError} error={bySymbol.error as Error} isEmpty={!isLoading && !isError && !symRows.length} moduleName="Strategies" requiredTables={['trade_summary_by_symbol', 'trade_summary_by_asset_class', 'options_distribution_by_expiration']} />
+      </div>
+    );
+  }
+
+  const autoCols = (rows: Record<string, unknown>[]) => {
+    if (!rows.length) return [];
+    return Object.keys(rows[0]).map(k => ({ key: k, label: k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) }));
+  };
+
   return (
     <div className="page-container">
       <div className="section-header">
-        <h1 className="section-title">Strategies</h1>
+        <h1 className="section-title">Strategies & Analysis</h1>
+        <ExportButton data={symRows} filename="strategy_summary" />
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {strategies.map(s => {
-          const legs = positions.filter(p => p.strategy === s.name);
-          return (
-            <div key={s.name} className="metric-card">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <div className="text-foreground font-semibold">{s.name}</div>
-                  <div className="text-xs text-muted-foreground">{s.underlying} · {s.legs} legs</div>
-                </div>
-                <span className="status-badge status-success">Active</span>
-              </div>
-              <div className="grid grid-cols-3 gap-3 mb-3">
-                <div><span className="metric-label">Open P&L</span><div className={`font-mono text-sm ${s.openPnl >= 0 ? 'text-success' : 'text-destructive'}`}>${s.openPnl.toLocaleString()}</div></div>
-                <div><span className="metric-label">Realized</span><div className="font-mono text-sm text-success">${s.realizedPnl.toLocaleString()}</div></div>
-                <div><span className="metric-label">Max Risk</span><div className="font-mono text-sm text-destructive">${s.maxRisk.toLocaleString()}</div></div>
-              </div>
-              <div className="grid grid-cols-2 gap-3 mb-3">
-                <div><span className="metric-label">Net Delta</span><div className="font-mono text-sm">{s.delta.toFixed(2)}</div></div>
-                <div><span className="metric-label">Net Theta</span><div className="font-mono text-sm text-success">{s.theta.toFixed(2)}</div></div>
-              </div>
-              {legs.length > 0 && (
-                <div className="border-t border-border pt-2">
-                  <div className="metric-label mb-1">Legs</div>
-                  {legs.map(l => (
-                    <div key={l.id} className="flex justify-between text-xs font-mono py-0.5">
-                      <span className="text-muted-foreground">{l.symbol}</span>
-                      <span className={l.quantity < 0 ? 'text-destructive' : 'text-success'}>{l.quantity}</span>
-                    </div>
-                  ))}
-                </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <MetricCard label="Symbols Traded" value={String(symRows.length)} />
+        <MetricCard label="Asset Classes" value={String(assetRows.length)} />
+        <MetricCard label="Expiry Buckets" value={String(((optDist.data || []) as unknown[]).length)} />
+      </div>
+
+      <Tabs defaultValue="by-symbol">
+        <TabsList>
+          <TabsTrigger value="by-symbol">By Symbol</TabsTrigger>
+          <TabsTrigger value="by-asset">By Asset Class</TabsTrigger>
+          <TabsTrigger value="by-expiry">Options by Expiry</TabsTrigger>
+        </TabsList>
+        {[
+          { key: 'by-symbol', q: bySymbol },
+          { key: 'by-asset', q: byAsset },
+          { key: 'by-expiry', q: optDist },
+        ].map(({ key, q }) => (
+          <TabsContent key={key} value={key}>
+            <div className="metric-card">
+              {q.isLoading ? (
+                <DataStatusBanner isLoading moduleName={key} isError={false} />
+              ) : q.isError ? (
+                <div className="text-xs text-muted-foreground py-4 text-center">Table not available</div>
+              ) : (
+                <DataTable columns={autoCols((q.data || []) as Record<string, unknown>[])} data={(q.data || []) as Record<string, unknown>[]} stickyHeader searchable searchKeys={Object.keys(((q.data as Record<string, unknown>[]) || [])[0] || {})} />
               )}
             </div>
-          );
-        })}
-      </div>
+          </TabsContent>
+        ))}
+      </Tabs>
     </div>
   );
 }
