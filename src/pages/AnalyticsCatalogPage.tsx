@@ -53,7 +53,7 @@ export default function AnalyticsCatalogPage() {
 
   const modules = useMemo(() => [...new Set(METRICS.map(m => m.module))], []);
   const filtered = useMemo(() => {
-    let rows = METRICS as Record<string, unknown>[];
+    let rows = METRICS as unknown as Record<string, unknown>[];
     if (moduleFilter) rows = rows.filter(r => r.module === moduleFilter);
     if (filter) {
       const lc = filter.toLowerCase();
