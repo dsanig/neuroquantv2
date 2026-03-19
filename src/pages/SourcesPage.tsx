@@ -33,6 +33,7 @@ export default function SourcesPage() {
   const [inspectResult, setInspectResult] = useState<{ schemas: string[]; tables: Array<{ schema: string; table: string; rowCount?: number | null }> }>({ schemas: [], tables: [] });
   const [preview, setPreview] = useState<{ columns: string[]; rows: Array<Record<string, unknown>> }>({ columns: [], rows: [] });
   const [mappingForm, setMappingForm] = useState<Record<string, string>>({});
+  const [testResults, setTestResults] = useState<Record<string, { status: 'testing' | 'success' | 'error'; tableCount?: number; message?: string }>>({});
 
   const { data: connections, isLoading, refetch } = useDatabaseConnections();
   const upsert = useUpsertDatabaseConnection();
@@ -48,6 +49,38 @@ export default function SourcesPage() {
     () => (connections || []).find((c) => c.id === selectedConnectionId) || null,
     [connections, selectedConnectionId],
   );
+
+  const runTestAndInspect = (connectionId: string) => {
+    setTestResults((prev) => ({ ...prev, [connectionId]: { status: 'testing' } }));
+    testConnection.mutate(connectionId, {
+      onSuccess: (data) => {
+        if (!data.success) {
+          setTestResults((prev) => ({ ...prev, [connectionId]: { status: 'error', message: data.error || 'Connection failed' } }));
+          return;
+        }
+        inspectConnection.mutate(connectionId, {
+          onSuccess: (inspectData) => {
+            const conn = (connections || []).find((c) => c.id === connectionId);
+            const schemaFilter = conn?.schema_name || 'public';
+            const tablesInSchema = (inspectData.tables || []).filter((t) => t.schema === schemaFilter);
+            setTestResults((prev) => ({
+              ...prev,
+              [connectionId]: { status: 'success', tableCount: tablesInSchema.length, message: data.message },
+            }));
+          },
+          onError: (err) => {
+            setTestResults((prev) => ({
+              ...prev,
+              [connectionId]: { status: 'success', message: `${data.message} (inspect failed: ${err.message})` },
+            }));
+          },
+        });
+      },
+      onError: (err) => {
+        setTestResults((prev) => ({ ...prev, [connectionId]: { status: 'error', message: err.message } }));
+      },
+    });
+  };
 
   const startCreate = () => {
     setCreating(true);
@@ -139,9 +172,21 @@ export default function SourcesPage() {
             </div>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" className="text-xs flex-1" onClick={() => { setSelectedConnectionId(c.id); startEdit(c.id); }}>Configure</Button>
-              <Button variant="outline" size="sm" onClick={() => testConnection.mutate(c.id)}>{testConnection.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}</Button>
+              <Button variant="outline" size="sm" className="text-xs" onClick={() => runTestAndInspect(c.id)} disabled={testResults[c.id]?.status === 'testing'}>
+                {testResults[c.id]?.status === 'testing' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
+                <span className="ml-1">Test</span>
+              </Button>
               <Button variant="outline" size="sm" onClick={() => toggle.mutate({ id: c.id, enabled: !c.enabled })}>{c.enabled ? <Power className="h-3 w-3" /> : <PowerOff className="h-3 w-3" />}</Button>
             </div>
+            {testResults[c.id] && testResults[c.id].status !== 'testing' && (
+              <div className={`text-xs rounded-md px-2 py-1.5 ${testResults[c.id].status === 'success' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-destructive/10 text-destructive border border-destructive/20'}`}>
+                {testResults[c.id].status === 'success' ? (
+                  <span>✓ Connected — <strong>{testResults[c.id].tableCount}</strong> table{testResults[c.id].tableCount !== 1 ? 's' : ''} in schema</span>
+                ) : (
+                  <span>✗ {testResults[c.id].message}</span>
+                )}
+              </div>
+            )}
           </div>
         ))}
       </div>
