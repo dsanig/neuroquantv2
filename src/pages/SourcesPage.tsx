@@ -33,6 +33,7 @@ export default function SourcesPage() {
   const [inspectResult, setInspectResult] = useState<{ schemas: string[]; tables: Array<{ schema: string; table: string; rowCount?: number | null }> }>({ schemas: [], tables: [] });
   const [preview, setPreview] = useState<{ columns: string[]; rows: Array<Record<string, unknown>> }>({ columns: [], rows: [] });
   const [mappingForm, setMappingForm] = useState<Record<string, string>>({});
+  const [testResults, setTestResults] = useState<Record<string, { status: 'testing' | 'success' | 'error'; tableCount?: number; message?: string }>>({});
 
   const { data: connections, isLoading, refetch } = useDatabaseConnections();
   const upsert = useUpsertDatabaseConnection();
@@ -48,6 +49,38 @@ export default function SourcesPage() {
     () => (connections || []).find((c) => c.id === selectedConnectionId) || null,
     [connections, selectedConnectionId],
   );
+
+  const runTestAndInspect = (connectionId: string) => {
+    setTestResults((prev) => ({ ...prev, [connectionId]: { status: 'testing' } }));
+    testConnection.mutate(connectionId, {
+      onSuccess: (data) => {
+        if (!data.success) {
+          setTestResults((prev) => ({ ...prev, [connectionId]: { status: 'error', message: data.error || 'Connection failed' } }));
+          return;
+        }
+        inspectConnection.mutate(connectionId, {
+          onSuccess: (inspectData) => {
+            const conn = (connections || []).find((c) => c.id === connectionId);
+            const schemaFilter = conn?.schema_name || 'public';
+            const tablesInSchema = (inspectData.tables || []).filter((t) => t.schema === schemaFilter);
+            setTestResults((prev) => ({
+              ...prev,
+              [connectionId]: { status: 'success', tableCount: tablesInSchema.length, message: data.message },
+            }));
+          },
+          onError: (err) => {
+            setTestResults((prev) => ({
+              ...prev,
+              [connectionId]: { status: 'success', message: `${data.message} (inspect failed: ${err.message})` },
+            }));
+          },
+        });
+      },
+      onError: (err) => {
+        setTestResults((prev) => ({ ...prev, [connectionId]: { status: 'error', message: err.message } }));
+      },
+    });
+  };
 
   const startCreate = () => {
     setCreating(true);
