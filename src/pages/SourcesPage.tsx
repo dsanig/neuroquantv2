@@ -172,9 +172,21 @@ export default function SourcesPage() {
             </div>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" className="text-xs flex-1" onClick={() => { setSelectedConnectionId(c.id); startEdit(c.id); }}>Configure</Button>
-              <Button variant="outline" size="sm" onClick={() => testConnection.mutate(c.id)}>{testConnection.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}</Button>
+              <Button variant="outline" size="sm" className="text-xs" onClick={() => runTestAndInspect(c.id)} disabled={testResults[c.id]?.status === 'testing'}>
+                {testResults[c.id]?.status === 'testing' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
+                <span className="ml-1">Test</span>
+              </Button>
               <Button variant="outline" size="sm" onClick={() => toggle.mutate({ id: c.id, enabled: !c.enabled })}>{c.enabled ? <Power className="h-3 w-3" /> : <PowerOff className="h-3 w-3" />}</Button>
             </div>
+            {testResults[c.id] && testResults[c.id].status !== 'testing' && (
+              <div className={`text-xs rounded-md px-2 py-1.5 ${testResults[c.id].status === 'success' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-destructive/10 text-destructive border border-destructive/20'}`}>
+                {testResults[c.id].status === 'success' ? (
+                  <span>✓ Connected — <strong>{testResults[c.id].tableCount}</strong> table{testResults[c.id].tableCount !== 1 ? 's' : ''} in schema</span>
+                ) : (
+                  <span>✗ {testResults[c.id].message}</span>
+                )}
+              </div>
+            )}
           </div>
         ))}
       </div>
