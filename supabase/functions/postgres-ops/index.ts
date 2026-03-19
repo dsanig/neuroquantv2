@@ -4,7 +4,7 @@ import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 type Action = "test_connection" | "inspect_tables" | "preview_table" | "run_query";
@@ -23,7 +23,6 @@ function sanitizeIdentifier(value: string) {
   return `"${value}"`;
 }
 
-// Whitelist of allowed read-only SQL prefixes
 const ALLOWED_SQL_PREFIXES = ["SELECT", "WITH"];
 
 function isReadOnlyQuery(sql: string): boolean {
@@ -32,7 +31,7 @@ function isReadOnlyQuery(sql: string): boolean {
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
     const body = await req.json();
@@ -68,19 +67,38 @@ serve(async (req) => {
     }
 
     const tls = conn.ssl_mode === "require" ? { enforce: false } : undefined;
-    const client = new Client({
-      hostname: conn.host,
-      port: conn.port,
-      user: conn.username,
-      password: conn.password_secret,
-      database: conn.database_name,
-      tls: tls ? { enabled: true, enforce: false } : { enabled: false },
-      connection: { attempts: 1 },
-    });
+
+    const connectWithTimeout = async (timeoutMs = 10000): Promise<Client> => {
+      const client = new Client({
+        hostname: conn.host,
+        port: conn.port,
+        user: conn.username,
+        password: conn.password_secret,
+        database: conn.database_name,
+        tls: tls ? { enabled: true, enforce: false } : { enabled: false },
+        connection: { attempts: 1 },
+      });
+
+      const timer = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(
+          `Connection timed out after ${timeoutMs / 1000}s. Ensure ${conn.host}:${conn.port} is reachable from the internet (not a private/local IP).`
+        )), timeoutMs)
+      );
+
+      await Promise.race([client.connect(), timer]);
+      return client;
+    };
+
+    let client: Client;
+    try {
+      client = await connectWithTimeout();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await supabase.from("database_connections").update({ last_status: "error", last_error: message }).eq("id", conn.id);
+      return jsonResponse({ success: false, error: message }, 500);
+    }
 
     try {
-      await client.connect();
-
       if (action === "test_connection") {
         await client.queryArray("SELECT 1");
 
