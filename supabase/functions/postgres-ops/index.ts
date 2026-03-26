@@ -81,7 +81,7 @@ serve(async (req) => {
 
       const timer = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error(
-          `Connection timed out after ${timeoutMs / 1000}s. Ensure ${conn.host}:${conn.port} is reachable from the internet (not a private/local IP).`
+          `Connection timed out after ${timeoutMs / 1000}s. ${conn.host}:${conn.port} is not reachable from Lovable Cloud. Check that the hostname points to the actual database server, the port is open, and any DNS proxy or firewall allows direct TCP connections.`
         )), timeoutMs)
       );
 
