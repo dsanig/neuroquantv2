@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_settings: {
+        Row: {
+          category: string
+          created_at: string
+          description: string | null
+          id: string
+          key: string
+          updated_at: string
+          value: Json
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          key: string
+          updated_at?: string
+          value: Json
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          key?: string
+          updated_at?: string
+          value?: Json
+        }
+        Relationships: []
+      }
       audit_log: {
         Row: {
           actor: string
@@ -46,6 +76,134 @@ export type Database = {
           source?: string
         }
         Relationships: []
+      }
+      capital_ledger: {
+        Row: {
+          account: string | null
+          action_type: string
+          amount: number
+          created_at: string
+          event_date: string
+          id: string
+          notes: string | null
+          running_balance: number | null
+          source: string
+          updated_at: string
+        }
+        Insert: {
+          account?: string | null
+          action_type: string
+          amount: number
+          created_at?: string
+          event_date: string
+          id?: string
+          notes?: string | null
+          running_balance?: number | null
+          source?: string
+          updated_at?: string
+        }
+        Update: {
+          account?: string | null
+          action_type?: string
+          amount?: number
+          created_at?: string
+          event_date?: string
+          id?: string
+          notes?: string | null
+          running_balance?: number | null
+          source?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      condor_trades: {
+        Row: {
+          account: string | null
+          broker_trade_ids: string[] | null
+          close_date: string | null
+          contracts: number
+          created_at: string
+          currency: string
+          exchange_mic: string | null
+          expiration_date: string
+          id: string
+          import_batch_id: string | null
+          instrument_id: string | null
+          isin: string | null
+          long_call_strike: number
+          long_put_strike: number
+          multiplier: number
+          notes: string | null
+          premium_paid_to_close: number | null
+          premium_per_share: number
+          short_call_strike: number
+          short_put_strike: number
+          status: string
+          trade_date: string
+          underlying: string
+          updated_at: string
+        }
+        Insert: {
+          account?: string | null
+          broker_trade_ids?: string[] | null
+          close_date?: string | null
+          contracts?: number
+          created_at?: string
+          currency?: string
+          exchange_mic?: string | null
+          expiration_date: string
+          id?: string
+          import_batch_id?: string | null
+          instrument_id?: string | null
+          isin?: string | null
+          long_call_strike: number
+          long_put_strike: number
+          multiplier?: number
+          notes?: string | null
+          premium_paid_to_close?: number | null
+          premium_per_share?: number
+          short_call_strike: number
+          short_put_strike: number
+          status?: string
+          trade_date: string
+          underlying: string
+          updated_at?: string
+        }
+        Update: {
+          account?: string | null
+          broker_trade_ids?: string[] | null
+          close_date?: string | null
+          contracts?: number
+          created_at?: string
+          currency?: string
+          exchange_mic?: string | null
+          expiration_date?: string
+          id?: string
+          import_batch_id?: string | null
+          instrument_id?: string | null
+          isin?: string | null
+          long_call_strike?: number
+          long_put_strike?: number
+          multiplier?: number
+          notes?: string | null
+          premium_paid_to_close?: number | null
+          premium_per_share?: number
+          short_call_strike?: number
+          short_put_strike?: number
+          status?: string
+          trade_date?: string
+          underlying?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "condor_trades_instrument_id_fkey"
+            columns: ["instrument_id"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       data_sources: {
         Row: {
@@ -229,6 +387,81 @@ export type Database = {
           },
         ]
       }
+      exchanges: {
+        Row: {
+          active: boolean
+          country: string | null
+          created_at: string
+          currency: string
+          id: string
+          mic: string
+          name: string
+          timezone: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          country?: string | null
+          created_at?: string
+          currency?: string
+          id?: string
+          mic: string
+          name: string
+          timezone?: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          country?: string | null
+          created_at?: string
+          currency?: string
+          id?: string
+          mic?: string
+          name?: string
+          timezone?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      fee_schedules: {
+        Row: {
+          active: boolean
+          created_at: string
+          fee_per_contract: number
+          id: string
+          max_fee: number | null
+          min_fee: number | null
+          name: string
+          per_leg: boolean
+          strategy_type: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          fee_per_contract?: number
+          id?: string
+          max_fee?: number | null
+          min_fee?: number | null
+          name: string
+          per_leg?: boolean
+          strategy_type: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          fee_per_contract?: number
+          id?: string
+          max_fee?: number | null
+          min_fee?: number | null
+          name?: string
+          per_leg?: boolean
+          strategy_type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       import_batches: {
         Row: {
           completed_at: string | null
@@ -342,6 +575,130 @@ export type Database = {
           },
         ]
       }
+      instruments: {
+        Row: {
+          active: boolean
+          asset_class: string
+          company_name: string
+          country: string | null
+          created_at: string
+          currency: string
+          exchange_mic: string | null
+          google_finance_symbol: string | null
+          id: string
+          internal_symbol: string | null
+          isin: string | null
+          mapping_status: string
+          multiplier: number
+          notes: string | null
+          preferred_listing: boolean
+          sector_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          asset_class?: string
+          company_name: string
+          country?: string | null
+          created_at?: string
+          currency?: string
+          exchange_mic?: string | null
+          google_finance_symbol?: string | null
+          id?: string
+          internal_symbol?: string | null
+          isin?: string | null
+          mapping_status?: string
+          multiplier?: number
+          notes?: string | null
+          preferred_listing?: boolean
+          sector_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          asset_class?: string
+          company_name?: string
+          country?: string | null
+          created_at?: string
+          currency?: string
+          exchange_mic?: string | null
+          google_finance_symbol?: string | null
+          id?: string
+          internal_symbol?: string | null
+          isin?: string | null
+          mapping_status?: string
+          multiplier?: number
+          notes?: string | null
+          preferred_listing?: boolean
+          sector_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "instruments_sector_id_fkey"
+            columns: ["sector_id"]
+            isOneToOne: false
+            referencedRelation: "sectors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      manual_overrides: {
+        Row: {
+          active: boolean
+          actor: string
+          created_at: string
+          data_domain: string
+          effective_end: string | null
+          effective_start: string
+          field_name: string
+          id: string
+          instrument_id: string | null
+          override_value: Json
+          reason: string
+          replace_behavior: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          actor?: string
+          created_at?: string
+          data_domain: string
+          effective_end?: string | null
+          effective_start?: string
+          field_name: string
+          id?: string
+          instrument_id?: string | null
+          override_value: Json
+          reason: string
+          replace_behavior?: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          actor?: string
+          created_at?: string
+          data_domain?: string
+          effective_end?: string | null
+          effective_start?: string
+          field_name?: string
+          id?: string
+          instrument_id?: string | null
+          override_value?: Json
+          reason?: string
+          replace_behavior?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "manual_overrides_instrument_id_fkey"
+            columns: ["instrument_id"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mapping_rules: {
         Row: {
           created_at: string
@@ -400,6 +757,137 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      market_data_cache: {
+        Row: {
+          created_at: string
+          data_domain: string
+          fallback_chain_attempted: string[] | null
+          fetched_at: string
+          id: string
+          instrument_id: string | null
+          is_delayed: boolean
+          is_stale: boolean
+          provider_name: string
+          raw_response: Json | null
+          source_timestamp: string | null
+          symbol_queried: string | null
+          value: Json
+        }
+        Insert: {
+          created_at?: string
+          data_domain: string
+          fallback_chain_attempted?: string[] | null
+          fetched_at?: string
+          id?: string
+          instrument_id?: string | null
+          is_delayed?: boolean
+          is_stale?: boolean
+          provider_name: string
+          raw_response?: Json | null
+          source_timestamp?: string | null
+          symbol_queried?: string | null
+          value: Json
+        }
+        Update: {
+          created_at?: string
+          data_domain?: string
+          fallback_chain_attempted?: string[] | null
+          fetched_at?: string
+          id?: string
+          instrument_id?: string | null
+          is_delayed?: boolean
+          is_stale?: boolean
+          provider_name?: string
+          raw_response?: Json | null
+          source_timestamp?: string | null
+          symbol_queried?: string | null
+          value?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "market_data_cache_instrument_id_fkey"
+            columns: ["instrument_id"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      market_data_providers: {
+        Row: {
+          allowed_currencies: string[]
+          api_key_ref: string | null
+          asset_class_coverage: string[]
+          cache_duration_seconds: number
+          config: Json
+          created_at: string
+          enabled: boolean
+          exchange_restrictions: string[]
+          health_status: string
+          id: string
+          last_error: string | null
+          last_error_at: string | null
+          last_successful_fetch: string | null
+          name: string
+          priority: number
+          provider_type: string
+          rate_limit_per_minute: number | null
+          region_coverage: string[]
+          retry_max: number
+          stale_threshold_seconds: number
+          updated_at: string
+          use_cases: string[]
+        }
+        Insert: {
+          allowed_currencies?: string[]
+          api_key_ref?: string | null
+          asset_class_coverage?: string[]
+          cache_duration_seconds?: number
+          config?: Json
+          created_at?: string
+          enabled?: boolean
+          exchange_restrictions?: string[]
+          health_status?: string
+          id?: string
+          last_error?: string | null
+          last_error_at?: string | null
+          last_successful_fetch?: string | null
+          name: string
+          priority?: number
+          provider_type?: string
+          rate_limit_per_minute?: number | null
+          region_coverage?: string[]
+          retry_max?: number
+          stale_threshold_seconds?: number
+          updated_at?: string
+          use_cases?: string[]
+        }
+        Update: {
+          allowed_currencies?: string[]
+          api_key_ref?: string | null
+          asset_class_coverage?: string[]
+          cache_duration_seconds?: number
+          config?: Json
+          created_at?: string
+          enabled?: boolean
+          exchange_restrictions?: string[]
+          health_status?: string
+          id?: string
+          last_error?: string | null
+          last_error_at?: string | null
+          last_successful_fetch?: string | null
+          name?: string
+          priority?: number
+          provider_type?: string
+          rate_limit_per_minute?: number | null
+          region_coverage?: string[]
+          retry_max?: number
+          stale_threshold_seconds?: number
+          updated_at?: string
+          use_cases?: string[]
+        }
+        Relationships: []
       }
       normalized_records: {
         Row: {
@@ -533,6 +1021,367 @@ export type Database = {
             columns: ["batch_id"]
             isOneToOne: false
             referencedRelation: "import_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sectors: {
+        Row: {
+          active: boolean
+          created_at: string
+          display_order: number
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          display_order?: number
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          display_order?: number
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      source_priority_rules: {
+        Row: {
+          created_at: string
+          data_domain: string
+          enabled: boolean
+          id: string
+          notes: string | null
+          priority_order: number
+          provider_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          data_domain: string
+          enabled?: boolean
+          id?: string
+          notes?: string | null
+          priority_order?: number
+          provider_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          data_domain?: string
+          enabled?: boolean
+          id?: string
+          notes?: string | null
+          priority_order?: number
+          provider_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "source_priority_rules_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "market_data_providers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      symbol_mappings: {
+        Row: {
+          created_at: string
+          id: string
+          instrument_id: string
+          notes: string | null
+          preferred: boolean
+          provider_name: string
+          provider_symbol: string
+          updated_at: string
+          verified: boolean
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          instrument_id: string
+          notes?: string | null
+          preferred?: boolean
+          provider_name: string
+          provider_symbol: string
+          updated_at?: string
+          verified?: boolean
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          instrument_id?: string
+          notes?: string | null
+          preferred?: boolean
+          provider_name?: string
+          provider_symbol?: string
+          updated_at?: string
+          verified?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "symbol_mappings_instrument_id_fkey"
+            columns: ["instrument_id"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tax_profiles: {
+        Row: {
+          active: boolean
+          applicable_strategies: string[]
+          created_at: string
+          id: string
+          name: string
+          rate: number
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          applicable_strategies?: string[]
+          created_at?: string
+          id?: string
+          name: string
+          rate?: number
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          applicable_strategies?: string[]
+          created_at?: string
+          id?: string
+          name?: string
+          rate?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      wheel_campaign_events: {
+        Row: {
+          campaign_id: string
+          capital_impact: number | null
+          created_at: string
+          description: string | null
+          event_date: string
+          event_type: string
+          id: string
+          metadata: Json | null
+          premium_impact: number | null
+          trade_id: string | null
+        }
+        Insert: {
+          campaign_id: string
+          capital_impact?: number | null
+          created_at?: string
+          description?: string | null
+          event_date: string
+          event_type: string
+          id?: string
+          metadata?: Json | null
+          premium_impact?: number | null
+          trade_id?: string | null
+        }
+        Update: {
+          campaign_id?: string
+          capital_impact?: number | null
+          created_at?: string
+          description?: string | null
+          event_date?: string
+          event_type?: string
+          id?: string
+          metadata?: Json | null
+          premium_impact?: number | null
+          trade_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wheel_campaign_events_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "wheel_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wheel_campaign_events_trade_id_fkey"
+            columns: ["trade_id"]
+            isOneToOne: false
+            referencedRelation: "wheel_trades"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wheel_campaigns: {
+        Row: {
+          account: string | null
+          assignment_flag: boolean
+          called_away_flag: boolean
+          campaign_end: string | null
+          campaign_start: string
+          created_at: string
+          id: string
+          instrument_id: string | null
+          notes: string | null
+          roll_count: number
+          status: string
+          underlying: string
+          updated_at: string
+        }
+        Insert: {
+          account?: string | null
+          assignment_flag?: boolean
+          called_away_flag?: boolean
+          campaign_end?: string | null
+          campaign_start: string
+          created_at?: string
+          id?: string
+          instrument_id?: string | null
+          notes?: string | null
+          roll_count?: number
+          status?: string
+          underlying: string
+          updated_at?: string
+        }
+        Update: {
+          account?: string | null
+          assignment_flag?: boolean
+          called_away_flag?: boolean
+          campaign_end?: string | null
+          campaign_start?: string
+          created_at?: string
+          id?: string
+          instrument_id?: string | null
+          notes?: string | null
+          roll_count?: number
+          status?: string
+          underlying?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wheel_campaigns_instrument_id_fkey"
+            columns: ["instrument_id"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wheel_trades: {
+        Row: {
+          account: string | null
+          broker_trade_id: string | null
+          campaign_id: string | null
+          close_date: string | null
+          contracts: number
+          created_at: string
+          currency: string
+          delta_at_entry: number | null
+          exchange_mic: string | null
+          expiration_date: string
+          id: string
+          import_batch_id: string | null
+          instrument_id: string | null
+          isin: string | null
+          multiplier: number
+          notes: string | null
+          premium_paid_to_close: number | null
+          premium_per_share: number
+          sector_id: string | null
+          status: string
+          stock_cost_basis: number | null
+          strike: number
+          trade_date: string
+          trade_type: string
+          underlying: string
+          updated_at: string
+        }
+        Insert: {
+          account?: string | null
+          broker_trade_id?: string | null
+          campaign_id?: string | null
+          close_date?: string | null
+          contracts?: number
+          created_at?: string
+          currency?: string
+          delta_at_entry?: number | null
+          exchange_mic?: string | null
+          expiration_date: string
+          id?: string
+          import_batch_id?: string | null
+          instrument_id?: string | null
+          isin?: string | null
+          multiplier?: number
+          notes?: string | null
+          premium_paid_to_close?: number | null
+          premium_per_share?: number
+          sector_id?: string | null
+          status?: string
+          stock_cost_basis?: number | null
+          strike: number
+          trade_date: string
+          trade_type?: string
+          underlying: string
+          updated_at?: string
+        }
+        Update: {
+          account?: string | null
+          broker_trade_id?: string | null
+          campaign_id?: string | null
+          close_date?: string | null
+          contracts?: number
+          created_at?: string
+          currency?: string
+          delta_at_entry?: number | null
+          exchange_mic?: string | null
+          expiration_date?: string
+          id?: string
+          import_batch_id?: string | null
+          instrument_id?: string | null
+          isin?: string | null
+          multiplier?: number
+          notes?: string | null
+          premium_paid_to_close?: number | null
+          premium_per_share?: number
+          sector_id?: string | null
+          status?: string
+          stock_cost_basis?: number | null
+          strike?: number
+          trade_date?: string
+          trade_type?: string
+          underlying?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wheel_trades_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "wheel_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wheel_trades_instrument_id_fkey"
+            columns: ["instrument_id"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wheel_trades_sector_id_fkey"
+            columns: ["sector_id"]
+            isOneToOne: false
+            referencedRelation: "sectors"
             referencedColumns: ["id"]
           },
         ]
