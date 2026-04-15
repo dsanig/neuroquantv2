@@ -7,6 +7,12 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { AppLayout } from "@/components/AppLayout";
 import LoginPage from "@/pages/LoginPage";
 import DashboardPage from "@/pages/DashboardPage";
+import WheelTrackerPage from "@/pages/WheelTrackerPage";
+import CampaignTrackerPage from "@/pages/CampaignTrackerPage";
+import CondorTrackerPage from "@/pages/CondorTrackerPage";
+import CapitalTrackerPage from "@/pages/CapitalTrackerPage";
+import InstrumentMasterPage from "@/pages/InstrumentMasterPage";
+import ProvidersPage from "@/pages/ProvidersPage";
 import PositionsPage from "@/pages/PositionsPage";
 import TradesPage from "@/pages/TradesPage";
 import StrategiesPage from "@/pages/StrategiesPage";
@@ -42,6 +48,12 @@ const App = () => (
             <Route path="/login" element={<LoginPage />} />
             <Route element={<AppLayout />}>
               <Route path="/" element={<DashboardPage />} />
+              <Route path="/wheel-tracker" element={<WheelTrackerPage />} />
+              <Route path="/campaigns" element={<CampaignTrackerPage />} />
+              <Route path="/condor-tracker" element={<CondorTrackerPage />} />
+              <Route path="/capital" element={<CapitalTrackerPage />} />
+              <Route path="/instruments" element={<InstrumentMasterPage />} />
+              <Route path="/providers" element={<ProvidersPage />} />
               <Route path="/positions" element={<PositionsPage />} />
               <Route path="/trades" element={<TradesPage />} />
               <Route path="/strategies" element={<StrategiesPage />} />
@@ -49,8 +61,6 @@ const App = () => (
               <Route path="/margin" element={<MarginPage />} />
               <Route path="/performance" element={<PerformancePage />} />
               <Route path="/income" element={<IncomePage />} />
-              <Route path="/campaigns" element={<CampaignsPage />} />
-              <Route path="/research" element={<ResearchPage />} />
               <Route path="/imports" element={<ImportsPage />} />
               <Route path="/sources" element={<SourcesPage />} />
               <Route path="/parser-config" element={<ParserConfigPage />} />

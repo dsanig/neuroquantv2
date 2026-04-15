@@ -1,168 +1,132 @@
 import { MetricCard } from "@/components/MetricCard";
-import { DataStatusBanner } from "@/components/DataStatusBanner";
-import { StatusBadge } from "@/components/StatusBadge";
-import { useExternalQuery, getActiveConnectionId } from "@/hooks/use-analytics";
-import { useDatabaseConnections } from "@/hooks/use-pipeline";
+import { useWheelTrades, useAppSettings, useCapitalLedger } from "@/hooks/use-settings";
+import { calcDashboardKPIs, calcMonthlyMetrics } from "@/lib/calculations";
 import { Link } from "react-router-dom";
 
-function fmtCurrency(v: unknown): string {
-  const n = Number(v);
-  if (isNaN(n)) return '—';
-  return n >= 0 ? `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `-$${Math.abs(n).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+function getSettingNum(settings: any[], key: string, fb: number): number {
+  const r = settings?.find((s: any) => s.key === key);
+  if (!r) return fb;
+  try { return Number(JSON.parse(String(r.value))); } catch { return fb; }
 }
-function fmtPct(v: unknown): string {
-  const n = Number(v);
-  if (isNaN(n)) return '—';
-  return `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
+
+function fmtCur(n: number) {
+  return n >= 0 ? `€${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `-€${Math.abs(n).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 }
-function fmtNum(v: unknown, dec = 2): string {
-  const n = Number(v);
-  return isNaN(n) ? '—' : n.toFixed(dec);
-}
+function fmtPct(n: number) { return `${(n * 100).toFixed(1)}%`; }
 
 export default function DashboardPage() {
-  const connId = getActiveConnectionId();
-  const { data: connections } = useDatabaseConnections();
-  const activeConn = (connections || []).find(c => c.id === connId);
+  const { data: trades, isLoading } = useWheelTrades();
+  const { data: settings } = useAppSettings();
+  const { data: ledger } = useCapitalLedger();
 
-  // NAV query — tries cnav first
-  const nav = useExternalQuery(['dash-nav'], `SELECT * FROM cnav ORDER BY report_date DESC LIMIT 1`, { transform: r => r[0] || null });
-  // Positions summary
-  const pos = useExternalQuery(['dash-pos-summary'], `
-    SELECT 
-      count(*) as position_count,
-      sum(CASE WHEN asset_class IN ('STK','Stock') THEN market_value ELSE 0 END) as stock_value,
-      sum(CASE WHEN asset_class IN ('OPT','Option') THEN market_value ELSE 0 END) as option_value,
-      sum(unrealized_pnl) as total_unrealized,
-      sum(realized_pnl) as total_realized,
-      sum(delta_dollars) as total_delta,
-      sum(theta) as total_theta,
-      sum(gamma) as total_gamma,
-      sum(vega) as total_vega
-    FROM open_positions_data
-  `, { transform: r => r[0] || null });
-  // Cash
-  const cash = useExternalQuery(['dash-cash'], `SELECT sum(total) as total_cash, sum(settled_cash) as settled FROM cash_report`, { transform: r => r[0] || null });
-  // Recent trades
-  const recentTrades = useExternalQuery(['dash-recent-trades'], `SELECT symbol, trade_date, quantity, trade_price, buy_sell FROM trnt ORDER BY trade_date DESC, trade_time DESC LIMIT 8`);
-  // Performance
-  const perf = useExternalQuery(['dash-perf'], `SELECT * FROM key_statistics LIMIT 20`);
+  const feePerContract = getSettingNum(settings || [], 'fee_per_contract', 1.25);
+  const taxRate = getSettingNum(settings || [], 'estimated_tax_rate', 0.25);
 
-  const isLoading = nav.isLoading || pos.isLoading;
-  const isError = nav.isError && pos.isError;
-  const noConn = !connId;
+  // Capital base from ledger
+  const capitalBase = (ledger || []).reduce((s: number, e: any) => s + Number(e.amount), 0);
 
-  if (noConn || isError) {
-    return (
-      <div className="page-container">
-        <div className="section-header">
-          <h1 className="section-title">Dashboard</h1>
-          <span className="text-xs font-mono text-muted-foreground">Last refresh: {new Date().toLocaleTimeString()}</span>
-        </div>
-        <DataStatusBanner isLoading={false} isError={isError} error={nav.error as Error || pos.error as Error} isEmpty={noConn} moduleName="Dashboard" requiredTables={['cnav', 'open_positions_data', 'cash_report', 'trnt']} />
-      </div>
-    );
-  }
-
-  const navData = nav.data as Record<string, unknown> | null;
-  const posData = pos.data as Record<string, unknown> | null;
-  const cashData = cash.data as Record<string, unknown> | null;
+  const kpis = trades ? calcDashboardKPIs(trades as any[], feePerContract, taxRate) : null;
+  const monthly = trades ? calcMonthlyMetrics(trades as any[], feePerContract) : [];
 
   return (
     <div className="page-container">
       <div className="section-header">
         <h1 className="section-title">Dashboard</h1>
-        <div className="flex items-center gap-3">
-          {activeConn && (
-            <span className="text-xs font-mono text-muted-foreground">
-              {activeConn.name} · {activeConn.host}
-            </span>
-          )}
-          <span className="text-xs font-mono text-muted-foreground">
-            {new Date().toLocaleTimeString()}
-          </span>
-        </div>
+        <span className="text-xs font-mono text-muted-foreground">{new Date().toLocaleString()}</span>
       </div>
 
       {isLoading ? (
-        <DataStatusBanner isLoading={true} isError={false} moduleName="Dashboard" />
+        <div className="text-center py-8 text-muted-foreground">Loading dashboard...</div>
+      ) : !kpis ? (
+        <div className="text-center py-12 text-muted-foreground">
+          <p className="text-lg mb-2">No trade data yet</p>
+          <p className="text-sm">Add trades in the <Link to="/wheel-tracker" className="text-primary hover:underline">Wheel Tracker</Link> to see dashboard metrics.</p>
+        </div>
       ) : (
         <>
-          {/* KPI Row 1: NAV & Returns */}
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            <MetricCard label="Net Asset Value" value={fmtCurrency(navData?.net_asset_value ?? navData?.nav ?? navData?.total)} />
-            <MetricCard label="Daily Return" value={fmtPct(navData?.daily_return ?? navData?.change_pct)} changeType={Number(navData?.daily_return ?? 0) >= 0 ? 'positive' : 'negative'} />
-            <MetricCard label="Unrealized P&L" value={fmtCurrency(posData?.total_unrealized)} changeType={Number(posData?.total_unrealized ?? 0) >= 0 ? 'positive' : 'negative'} />
-            <MetricCard label="Realized P&L" value={fmtCurrency(posData?.total_realized)} changeType={Number(posData?.total_realized ?? 0) >= 0 ? 'positive' : 'negative'} />
-            <MetricCard label="Cash Balance" value={fmtCurrency(cashData?.total_cash)} />
-            <MetricCard label="Settled Cash" value={fmtCurrency(cashData?.settled)} />
+          {/* Executive Summary */}
+          <div>
+            <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2">Executive Summary</h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+              <MetricCard label="Realized P/L" value={fmtCur(kpis.totalRealizedPL)} changeType={kpis.totalRealizedPL >= 0 ? 'positive' : 'negative'} />
+              <MetricCard label="Gross Premium" value={fmtCur(kpis.totalGrossPremium)} />
+              <MetricCard label="Total Fees" value={fmtCur(kpis.totalFees)} />
+              <MetricCard label="Capital Base" value={fmtCur(capitalBase)} />
+              <MetricCard label="Capital Utilization" value={capitalBase > 0 ? fmtPct((kpis.cspCapital + kpis.ccCapital) / capitalBase) : '—'} />
+              <MetricCard label="YTD Yield" value={capitalBase > 0 ? fmtPct(kpis.totalRealizedPL / capitalBase) : '—'} changeType={kpis.totalRealizedPL >= 0 ? 'positive' : 'negative'} />
+            </div>
           </div>
 
-          {/* KPI Row 2: Portfolio Composition */}
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            <MetricCard label="Stock Value" value={fmtCurrency(posData?.stock_value)} />
-            <MetricCard label="Options Value" value={fmtCurrency(posData?.option_value)} />
-            <MetricCard label="Positions" value={String(posData?.position_count ?? '—')} />
-            <MetricCard label="Portfolio Delta" value={fmtNum(posData?.total_delta)} />
-            <MetricCard label="Portfolio Theta" value={fmtNum(posData?.total_theta)} changeType={Number(posData?.total_theta ?? 0) > 0 ? 'positive' : 'negative'} />
-            <MetricCard label="Portfolio Vega" value={fmtNum(posData?.total_vega)} />
+          {/* Returns */}
+          <div>
+            <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2">Returns on Closed Campaigns</h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <MetricCard label="Weighted Avg ROC" value={fmtPct(kpis.weightedROC)} />
+              <MetricCard label="Weighted Ann ROC" value={fmtPct(kpis.weightedAnnROC)} />
+              <MetricCard label="Campaigns Closed" value={String(kpis.closedCount)} />
+              <MetricCard label="Open Positions" value={String(kpis.openCount)} />
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {/* Key Statistics */}
-            <div className="metric-card lg:col-span-2">
-              <div className="metric-label mb-3">Key Statistics</div>
-              {perf.isLoading ? (
-                <div className="text-xs text-muted-foreground py-4 text-center">Loading...</div>
-              ) : perf.isError ? (
-                <div className="text-xs text-destructive py-2">Failed to load: {(perf.error as Error)?.message}</div>
-              ) : (
+          {/* Open Trade Allocation */}
+          <div>
+            <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2">Open Trade Allocation</h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <MetricCard label="CSP Capital at Risk" value={fmtCur(kpis.cspCapital)} />
+              <MetricCard label="CC Capital at Risk" value={fmtCur(kpis.ccCapital)} />
+              <MetricCard label="Expiring ≤14d" value={String(kpis.upcomingExpirations)} changeType={kpis.upcomingExpirations > 0 ? 'negative' : 'neutral'} />
+            </div>
+          </div>
+
+          {/* Win/Loss */}
+          <div>
+            <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2">Win / Loss Mechanics</h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+              <MetricCard label="Wins" value={String(kpis.wins)} />
+              <MetricCard label="Losses" value={String(kpis.losses)} />
+              <MetricCard label="Win Rate" value={fmtPct(kpis.winRate)} changeType={kpis.winRate >= 0.5 ? 'positive' : 'negative'} />
+              <MetricCard label="Avg Gain" value={fmtCur(kpis.avgGain)} />
+              <MetricCard label="Avg Loss" value={fmtCur(kpis.avgLoss)} />
+              <MetricCard label="Profit Factor" value={kpis.profitFactor === Infinity ? '∞' : kpis.profitFactor.toFixed(2)} />
+              <MetricCard label="Expectancy" value={fmtCur(kpis.expectancy)} changeType={kpis.expectancy >= 0 ? 'positive' : 'negative'} />
+              <MetricCard label="Total Fees" value={fmtCur(kpis.totalFees)} />
+            </div>
+          </div>
+
+          {/* Monthly Performance */}
+          <div>
+            <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2">Monthly Performance</h2>
+            {monthly.length === 0 ? (
+              <div className="text-center py-4 text-xs text-muted-foreground">No closed trades yet</div>
+            ) : (
+              <div className="overflow-x-auto">
                 <table className="data-table">
-                  <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+                  <thead>
+                    <tr>
+                      <th>Month</th><th className="text-right">Realized P/L</th><th className="text-right">Gross Premium</th>
+                      <th className="text-right">Trades</th><th className="text-right">Win Rate</th>
+                      <th className="text-right">Wt Avg ROC</th><th className="text-right">Wt Ann ROC</th>
+                      <th className="text-right">Safest Δ</th><th className="text-right">Riskiest Δ</th>
+                    </tr>
+                  </thead>
                   <tbody>
-                    {((perf.data as Record<string, unknown>[]) || []).map((row, i) => {
-                      const keys = Object.keys(row);
-                      const nameKey = keys.find(k => k.toLowerCase().includes('name') || k.toLowerCase().includes('metric') || k.toLowerCase().includes('statistic')) || keys[0];
-                      const valKey = keys.find(k => k.toLowerCase().includes('value') || k.toLowerCase().includes('amount')) || keys[1];
-                      return (
-                        <tr key={i}>
-                          <td className="font-sans text-foreground">{String(row[nameKey] ?? '')}</td>
-                          <td>{String(row[valKey] ?? '')}</td>
-                        </tr>
-                      );
-                    })}
+                    {monthly.map(m => (
+                      <tr key={m.month}>
+                        <td className="text-foreground font-sans">{m.month}</td>
+                        <td className={`text-right ${m.realizedPL >= 0 ? 'text-success' : 'text-destructive'}`}>{fmtCur(m.realizedPL)}</td>
+                        <td className="text-right">{fmtCur(m.grossPremium)}</td>
+                        <td className="text-right">{m.tradesClosed}</td>
+                        <td className="text-right">{fmtPct(m.winRate)}</td>
+                        <td className="text-right">{fmtPct(m.weightedROC)}</td>
+                        <td className="text-right">{fmtPct(m.weightedAnnROC)}</td>
+                        <td className="text-right">{m.safestDelta != null ? m.safestDelta.toFixed(2) : '—'}</td>
+                        <td className="text-right">{m.riskiestDelta != null ? m.riskiestDelta.toFixed(2) : '—'}</td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
-              )}
-            </div>
-
-            {/* Recent Trades */}
-            <div className="metric-card">
-              <div className="flex items-center justify-between mb-3">
-                <div className="metric-label">Recent Trades</div>
-                <Link to="/trades" className="text-xs text-primary hover:underline">View All</Link>
               </div>
-              {recentTrades.isLoading ? (
-                <div className="text-xs text-muted-foreground py-4 text-center">Loading...</div>
-              ) : (
-                <div className="space-y-2">
-                  {((recentTrades.data as Record<string, unknown>[]) || []).map((t, i) => (
-                    <div key={i} className="flex items-center justify-between text-xs border-b border-border/50 pb-1.5">
-                      <div>
-                        <div className="text-foreground font-sans font-medium text-[13px]">{String(t.symbol ?? '')}</div>
-                        <div className="text-muted-foreground font-mono mt-0.5">{String(t.trade_date ?? '')}</div>
-                      </div>
-                      <div className="text-right">
-                        <div className={`font-mono ${String(t.buy_sell ?? '').toUpperCase().includes('BUY') ? 'text-success' : 'text-destructive'}`}>
-                          {String(t.buy_sell ?? '')} {String(t.quantity ?? '')}
-                        </div>
-                        <div className="text-muted-foreground font-mono">${String(t.trade_price ?? '')}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            )}
           </div>
         </>
       )}

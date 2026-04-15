@@ -2,7 +2,8 @@ import {
   LayoutDashboard, Layers, ArrowLeftRight, Target, ShieldAlert, 
   Landmark, TrendingUp, DollarSign, Download, Database, 
   Settings2, MapPin, FileText, ScrollText, Settings, UserCog, LogOut, Brain,
-  Crosshair, FlaskConical, ShieldCheck, BookOpen, Globe
+  Crosshair, FlaskConical, ShieldCheck, BookOpen, Globe,
+  GitCompare, Zap, BarChart3, Wallet, Scale, Search
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
@@ -14,32 +15,30 @@ import {
 
 const mainNav = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Positions", url: "/positions", icon: Layers },
-  { title: "Trades", url: "/trades", icon: ArrowLeftRight },
-  { title: "Strategies", url: "/strategies", icon: Target },
-  { title: "Risk", url: "/risk", icon: ShieldAlert },
-  { title: "Margin", url: "/margin", icon: Landmark },
+  { title: "Wheel Tracker", url: "/wheel-tracker", icon: Target },
+  { title: "Campaign Tracker", url: "/campaigns", icon: Crosshair },
+  { title: "Iron Condor", url: "/condor-tracker", icon: Layers },
+  { title: "Capital Tracker", url: "/capital", icon: Wallet },
+  { title: "Liquidity & Sectors", url: "/liquidity", icon: Scale },
+  { title: "Stress Testing", url: "/stress", icon: Zap },
+  { title: "Comparison Lab", url: "/comparison", icon: GitCompare },
   { title: "Performance", url: "/performance", icon: TrendingUp },
-  { title: "Income", url: "/income", icon: DollarSign },
-  { title: "Campaigns", url: "/campaigns", icon: Crosshair },
-  { title: "Research", url: "/research", icon: FlaskConical },
 ];
 
-const ingestionNav = [
+const dataNav = [
+  { title: "Data & Integrations", url: "/providers", icon: Globe },
+  { title: "Instrument Master", url: "/instruments", icon: Search },
   { title: "Imports", url: "/imports", icon: Download },
   { title: "Data Connections", url: "/sources", icon: Database },
   { title: "Parser Config", url: "/parser-config", icon: Settings2 },
   { title: "Mapping Rules", url: "/mapping-rules", icon: MapPin },
-  { title: "External Data", url: "/external-data", icon: Globe },
 ];
 
 const adminNav = [
   { title: "Data Quality", url: "/data-quality", icon: ShieldCheck },
-  { title: "Analytics Catalog", url: "/analytics-catalog", icon: BookOpen },
   { title: "Reports", url: "/reports", icon: FileText },
   { title: "Audit Log", url: "/audit-log", icon: ScrollText },
   { title: "Settings", url: "/settings", icon: Settings },
-  { title: "Admin", url: "/admin", icon: UserCog },
 ];
 
 export function AppSidebar() {
@@ -86,11 +85,11 @@ export function AppSidebar() {
 
         <SidebarGroup>
           <SidebarGroupLabel className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground px-3">Data Operations</SidebarGroupLabel>
-          <SidebarGroupContent>{renderItems(ingestionNav)}</SidebarGroupContent>
+          <SidebarGroupContent>{renderItems(dataNav)}</SidebarGroupContent>
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground px-3">Operations</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground px-3">Admin</SidebarGroupLabel>
           <SidebarGroupContent>{renderItems(adminNav)}</SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
