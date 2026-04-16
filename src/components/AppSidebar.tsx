@@ -23,6 +23,7 @@ const mainNav = [
   { title: "Stress Testing", url: "/stress", icon: Zap },
   { title: "Comparison Lab", url: "/comparison", icon: GitCompare },
   { title: "Performance", url: "/performance", icon: TrendingUp },
+  { title: "Payoff Charts", url: "/payoff", icon: LineChart },
 ];
 
 const dataNav = [
@@ -37,6 +38,7 @@ const dataNav = [
 const adminNav = [
   { title: "Data Quality", url: "/data-quality", icon: ShieldCheck },
   { title: "Reports", url: "/reports", icon: FileText },
+  { title: "Recompute", url: "/recompute", icon: RefreshCw },
   { title: "Audit Log", url: "/audit-log", icon: ScrollText },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
