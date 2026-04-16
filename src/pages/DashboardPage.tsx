@@ -1,7 +1,13 @@
+import { useMemo } from "react";
 import { MetricCard } from "@/components/MetricCard";
 import { useWheelTrades, useAppSettings, useCapitalLedger } from "@/hooks/use-settings";
 import { calcDashboardKPIs, calcMonthlyMetrics } from "@/lib/calculations";
 import { Link } from "react-router-dom";
+import {
+  BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, Area, AreaChart,
+} from "recharts";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 function getSettingNum(settings: any[], key: string, fb: number): number {
   const r = settings?.find((s: any) => s.key === key);
@@ -128,6 +134,55 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
+
+          {/* Charts */}
+          {monthly.length > 1 && (() => {
+            const chartData = [...monthly].reverse();
+            const cumData = chartData.reduce((acc: any[], m, i) => {
+              const prev = i > 0 ? acc[i - 1].cumPL : 0;
+              acc.push({ month: m.month, realizedPL: m.realizedPL, grossPremium: m.grossPremium, cumPL: prev + m.realizedPL });
+              return acc;
+            }, []);
+            return (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <Card>
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">Monthly P/L vs Premium</CardTitle></CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={250}>
+                      <BarChart data={chartData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis dataKey="month" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
+                        <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
+                        <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", fontSize: 11 }} />
+                        <Bar dataKey="grossPremium" name="Gross Premium" fill="hsl(var(--primary))" opacity={0.4} />
+                        <Bar dataKey="realizedPL" name="Realized P/L" fill="hsl(var(--primary))" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">Cumulative P/L</CardTitle></CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={250}>
+                      <AreaChart data={cumData}>
+                        <defs>
+                          <linearGradient id="cumGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                            <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis dataKey="month" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
+                        <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
+                        <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", fontSize: 11 }} />
+                        <Area type="monotone" dataKey="cumPL" name="Cumulative P/L" stroke="hsl(var(--primary))" fill="url(#cumGrad)" strokeWidth={2} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              </div>
+            );
+          })()}
         </>
       )}
     </div>

@@ -3,7 +3,7 @@ import {
   Landmark, TrendingUp, DollarSign, Download, Database, 
   Settings2, MapPin, FileText, ScrollText, Settings, UserCog, LogOut, Brain,
   Crosshair, FlaskConical, ShieldCheck, BookOpen, Globe,
-  GitCompare, Zap, BarChart3, Wallet, Scale, Search
+  GitCompare, Zap, BarChart3, Wallet, Scale, Search, LineChart, RefreshCw
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
@@ -23,6 +23,7 @@ const mainNav = [
   { title: "Stress Testing", url: "/stress", icon: Zap },
   { title: "Comparison Lab", url: "/comparison", icon: GitCompare },
   { title: "Performance", url: "/performance", icon: TrendingUp },
+  { title: "Payoff Charts", url: "/payoff", icon: LineChart },
 ];
 
 const dataNav = [
@@ -37,6 +38,7 @@ const dataNav = [
 const adminNav = [
   { title: "Data Quality", url: "/data-quality", icon: ShieldCheck },
   { title: "Reports", url: "/reports", icon: FileText },
+  { title: "Recompute", url: "/recompute", icon: RefreshCw },
   { title: "Audit Log", url: "/audit-log", icon: ScrollText },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
