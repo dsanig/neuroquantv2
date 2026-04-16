@@ -33,6 +33,9 @@ import ResearchPage from "@/pages/ResearchPage";
 import DataQualityPage from "@/pages/DataQualityPage";
 import AnalyticsCatalogPage from "@/pages/AnalyticsCatalogPage";
 import ExternalDataPage from "@/pages/ExternalDataPage";
+import LiquiditySectorsPage from "@/pages/LiquiditySectorsPage";
+import StressTestingPage from "@/pages/StressTestingPage";
+import ComparisonLabPage from "@/pages/ComparisonLabPage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -53,6 +56,9 @@ const App = () => (
               <Route path="/condor-tracker" element={<CondorTrackerPage />} />
               <Route path="/capital" element={<CapitalTrackerPage />} />
               <Route path="/instruments" element={<InstrumentMasterPage />} />
+              <Route path="/liquidity" element={<LiquiditySectorsPage />} />
+              <Route path="/stress" element={<StressTestingPage />} />
+              <Route path="/comparison" element={<ComparisonLabPage />} />
               <Route path="/providers" element={<ProvidersPage />} />
               <Route path="/positions" element={<PositionsPage />} />
               <Route path="/trades" element={<TradesPage />} />
