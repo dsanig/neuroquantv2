@@ -36,6 +36,8 @@ import ExternalDataPage from "@/pages/ExternalDataPage";
 import LiquiditySectorsPage from "@/pages/LiquiditySectorsPage";
 import StressTestingPage from "@/pages/StressTestingPage";
 import ComparisonLabPage from "@/pages/ComparisonLabPage";
+import PayoffChartsPage from "@/pages/PayoffChartsPage";
+import RecomputeEnginePage from "@/pages/RecomputeEnginePage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
