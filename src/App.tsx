@@ -33,6 +33,9 @@ import ResearchPage from "@/pages/ResearchPage";
 import DataQualityPage from "@/pages/DataQualityPage";
 import AnalyticsCatalogPage from "@/pages/AnalyticsCatalogPage";
 import ExternalDataPage from "@/pages/ExternalDataPage";
+import LiquiditySectorsPage from "@/pages/LiquiditySectorsPage";
+import StressTestingPage from "@/pages/StressTestingPage";
+import ComparisonLabPage from "@/pages/ComparisonLabPage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
