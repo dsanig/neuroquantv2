@@ -3,7 +3,7 @@ import {
   Landmark, TrendingUp, DollarSign, Download, Database, 
   Settings2, MapPin, FileText, ScrollText, Settings, UserCog, LogOut, Brain,
   Crosshair, FlaskConical, ShieldCheck, BookOpen, Globe,
-  GitCompare, Zap, BarChart3, Wallet, Scale, Search
+  GitCompare, Zap, BarChart3, Wallet, Scale, Search, LineChart, RefreshCw
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
