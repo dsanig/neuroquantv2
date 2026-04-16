@@ -56,6 +56,9 @@ const App = () => (
               <Route path="/condor-tracker" element={<CondorTrackerPage />} />
               <Route path="/capital" element={<CapitalTrackerPage />} />
               <Route path="/instruments" element={<InstrumentMasterPage />} />
+              <Route path="/liquidity" element={<LiquiditySectorsPage />} />
+              <Route path="/stress" element={<StressTestingPage />} />
+              <Route path="/comparison" element={<ComparisonLabPage />} />
               <Route path="/providers" element={<ProvidersPage />} />
               <Route path="/positions" element={<PositionsPage />} />
               <Route path="/trades" element={<TradesPage />} />
